@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { LeadsTable } from '@/components/LeadsTable';
 import { LeadFilterPanel } from '@/components/leads/LeadFilterPanel';
 import { LeadColumnToggle } from '@/components/leads/LeadColumnToggle';
+import { ViewToggle } from '@/components/leads/ViewToggle';
 import { AddToGroupMenu } from '@/components/groups/AddToGroupMenu';
 import { SaveAsSmartGroupButton } from '@/components/groups/SaveAsSmartGroupButton';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
@@ -121,7 +122,8 @@ function GlobalLeadsBody() {
                   </>
                 )}
               </div>
-              <div className="ml-auto flex gap-2 flex-wrap">
+              <div className="ml-auto flex gap-2 flex-wrap items-center">
+                <ViewToggle />
                 {selected.size > 0 && (
                   <Button
                     variant="secondary"
