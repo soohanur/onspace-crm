@@ -5,12 +5,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
   api,
+  FollowUpStatus,
   Lead,
   LeadStage,
   LeadValidity,
 } from '@/lib/api';
 import { LEAD_STAGES, stageClass, stageLabel } from '@/lib/stages';
-import { ChevronDown, CheckCircle2, AlertTriangle } from 'lucide-react';
+import {
+  ChevronDown,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+} from 'lucide-react';
 
 const SAVE_DEBOUNCE_MS = 300;
 
@@ -99,8 +105,55 @@ export function LeadPipelineControls({ lead }: { lead: Lead }) {
           onChange={(v) => validityMut.mutate(v)}
           pending={validityMut.isPending}
         />
+        <FollowUpStatusBadge status={lead.followUpStatus} />
       </div>
     </div>
+  );
+}
+
+const FOLLOWUP_BADGE: Record<
+  FollowUpStatus,
+  { label: string; className: string }
+> = {
+  none: {
+    label: 'No follow-up',
+    className: 'bg-background text-neutral border-border',
+  },
+  needed: {
+    label: 'Follow-up needed',
+    className: 'bg-blue-100 text-blue-700 border-blue-200',
+  },
+  scheduled: {
+    label: 'Follow-up scheduled',
+    className: 'bg-primary/10 text-primary border-primary/20',
+  },
+  completed: {
+    label: 'Follow-up completed',
+    className: 'bg-success/10 text-success border-success/20',
+  },
+  overdue: {
+    label: 'Follow-up overdue',
+    className: 'bg-error/10 text-error border-error/20',
+  },
+};
+
+/**
+ * Read-only chip mirroring `lead.followUpStatus`. The status itself is
+ * recomputed server-side from the lead's tasks — the user manages it
+ * indirectly via the Tasks panel below.
+ */
+function FollowUpStatusBadge({ status }: { status: FollowUpStatus }) {
+  const cfg = FOLLOWUP_BADGE[status];
+  return (
+    <span
+      title="This is auto-managed from the lead's tasks. Add or update follow-ups in the Tasks panel below."
+      className={clsx(
+        'inline-flex items-center gap-1 h-8 px-2 rounded-md border text-[12px] font-medium whitespace-nowrap',
+        cfg.className,
+      )}
+    >
+      <Clock size={12} /> {cfg.label}
+    </span>
   );
 }
 

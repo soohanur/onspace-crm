@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma, LeadStage, LeadValidity } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StageAutomationService } from './stage-automation.service';
 
 export type OrderBy = 'recent' | 'name' | 'rating' | 'years';
 
@@ -55,7 +56,11 @@ export interface LeadFilter {
 
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => StageAutomationService))
+    private readonly stageAutomation: StageAutomationService,
+  ) {}
 
   private buildWhere(f: LeadFilter): Prisma.LeadWhereInput {
     const where: Prisma.LeadWhereInput = {};
@@ -204,8 +209,29 @@ export class LeadsService {
   }
 
   async updateStage(id: string, stage: LeadStage) {
-    await this.assertExists(id);
-    return this.prisma.lead.update({ where: { id }, data: { stage } });
+    const existing = await this.prisma.lead.findUnique({
+      where: { id },
+      select: { id: true, stage: true },
+    });
+    if (!existing) throw new NotFoundException('Lead not found');
+
+    // Skip the write entirely if there's no actual change — keeps
+    // stageChangedAt accurate (only updated when stage really moves) and
+    // skips the automation hook for no-op clicks.
+    if (existing.stage === stage) {
+      return this.prisma.lead.findUnique({ where: { id } }) as Promise<any>;
+    }
+
+    const updated = await this.prisma.lead.update({
+      where: { id },
+      data: { stage, stageChangedAt: new Date() },
+    });
+
+    // Manual stage change side-effects (e.g. qualified -> auto-task).
+    // Wrapped internally; never bubbles.
+    await this.stageAutomation.onLeadStageChanged(id, existing.stage, stage);
+
+    return updated;
   }
 
   async updateScore(id: string, score: number) {

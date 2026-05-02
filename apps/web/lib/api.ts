@@ -215,6 +215,8 @@ export interface Lead {
   score: number;
   validity: LeadValidity;
   followUpStatus: FollowUpStatus;
+  /** Phase 7: last time `stage` actually changed. */
+  stageChangedAt: string | null;
   /** Present in findOne responses (lead detail) — empty in list responses. */
   contacts?: Contact[];
   /** Open + in-progress tasks; only populated by findOne. */

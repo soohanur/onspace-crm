@@ -11,6 +11,7 @@ import {
   TaskStatus,
 } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FollowUpStatusService } from '../leads/followup-status.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
 export type TaskBucket = 'today' | 'overdue' | 'upcoming' | 'completed';
@@ -31,7 +32,10 @@ export interface ListTasksFilter {
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly followUpStatus: FollowUpStatusService,
+  ) {}
 
   async list(filter: ListTasksFilter) {
     const where = this.buildWhere(filter);
@@ -107,7 +111,7 @@ export class TasksService {
       }
     }
 
-    return this.prisma.task.create({
+    const created = await this.prisma.task.create({
       data: {
         leadId: dto.leadId,
         contactId: dto.contactId ?? null,
@@ -130,6 +134,8 @@ export class TasksService {
         contact: { select: { id: true, name: true, contactType: true } },
       },
     });
+    await this.followUpStatus.recompute(created.leadId);
+    return created;
   }
 
   async update(id: string, dto: UpdateTaskDto) {
@@ -172,7 +178,7 @@ export class TasksService {
       }
     }
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id },
       data,
       include: {
@@ -182,12 +188,22 @@ export class TasksService {
         contact: { select: { id: true, name: true, contactType: true } },
       },
     });
+    // Recompute follow-up status. The DTO doesn't currently allow leadId
+    // changes, but if a future patch ever did move the task between leads
+    // we'd want to refresh both — guard for that here.
+    await this.followUpStatus.recompute(updated.leadId);
+    if (existing.leadId !== updated.leadId) {
+      await this.followUpStatus.recompute(existing.leadId);
+    }
+    return updated;
   }
 
   async remove(id: string) {
     const t = await this.prisma.task.findUnique({ where: { id } });
     if (!t) throw new NotFoundException('Task not found');
+    const leadId = t.leadId;
     await this.prisma.task.delete({ where: { id } });
+    await this.followUpStatus.recompute(leadId);
     return { ok: true as const };
   }
 

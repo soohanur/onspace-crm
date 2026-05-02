@@ -211,6 +211,11 @@ model Lead {
   validity       LeadValidity   @default(valid)
   followUpStatus FollowUpStatus @default(none) @map("follow_up_status")
 
+  // Phase 7 — last time `stage` actually changed. Used by automation rules
+  // that need "X has been in stage Y for N days" precision; lead.updatedAt
+  // is too noisy because it bumps on every column write.
+  stageChangedAt DateTime?      @map("stage_changed_at")
+
   // Dedup hash: sha1(lower(business_name) + normalize(phone) + normalize(address))
   dedupHash      String?  @map("dedup_hash")
 

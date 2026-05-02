@@ -11,6 +11,7 @@ import { GroupsModule } from './modules/groups/groups.module';
 import { NotesModule } from './modules/notes/notes.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { AutomationModule } from './modules/automation/automation.module';
 import { EmailModule } from './modules/email/email.module';
 
 @Module({
@@ -33,6 +34,7 @@ import { EmailModule } from './modules/email/email.module';
     NotesModule,
     ContactsModule,
     TasksModule,
+    AutomationModule,
     EmailModule,
   ],
   controllers: [HealthController],

@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api, Lead } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, CreateTaskInput, Lead, Task } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
 import { ColumnKey } from '@/hooks/useColumnPrefs';
+import { defaultContextForStage } from '@/lib/tasks';
 import { Chip } from './ui/Chip';
 import { StageBadge } from './leads/StageBadge';
+import { TaskFormModal } from './tasks/TaskFormModal';
 import {
   ExternalLink,
   Globe,
@@ -21,6 +23,7 @@ import {
   Image as ImageIcon,
   FileText,
   Trash2,
+  Plus,
 } from 'lucide-react';
 
 /** Returns a Set of lead IDs added since the last render — used to highlight new rows. */
@@ -62,6 +65,7 @@ export function LeadsTable({
   /** Called with the lead's id when the user confirms the row's delete action. */
   onDelete?: (id: string) => void;
 }) {
+  const qc = useQueryClient();
   const newIds = useNewIds(leads);
   const isVisible = (k: ColumnKey) => !visibleColumns || visibleColumns.has(k);
 
@@ -77,6 +81,21 @@ export function LeadsTable({
     queryFn: () => api.taskOpenCounts(leads.map((l) => l.id)),
     enabled: taskColumnVisible && leads.length > 0,
     refetchInterval: 30_000,
+  });
+
+  // Per-row "Follow-up" modal — only one open at a time, keyed by lead.
+  const [followupLead, setFollowupLead] = useState<Lead | null>(null);
+  const createTask = useMutation({
+    mutationFn: (input: CreateTaskInput) => api.createTask(input),
+    onSuccess: (created: Task) => {
+      setFollowupLead(null);
+      qc.invalidateQueries({ queryKey: ['leads-global'] });
+      qc.invalidateQueries({ queryKey: ['lead-task-counts'] });
+      qc.invalidateQueries({ queryKey: ['lead-tasks', created.leadId] });
+      qc.invalidateQueries({ queryKey: ['lead', created.leadId] });
+      qc.invalidateQueries({ queryKey: ['tasks-list'] });
+      qc.invalidateQueries({ queryKey: ['tasks-count-full'] });
+    },
   });
 
   if (leads.length === 0) {
@@ -107,6 +126,7 @@ export function LeadsTable({
             {isVisible('stage') && <Th>Stage</Th>}
             {isVisible('score') && <Th className="text-right">Score</Th>}
             {isVisible('tasks') && <Th>Tasks</Th>}
+            {isVisible('actions') && <Th>{''}</Th>}
             {isVisible('categories') && <Th>Categories</Th>}
             {isVisible('phone') && <Th>Phone</Th>}
             {isVisible('email') && <Th>Email</Th>}
@@ -186,6 +206,15 @@ export function LeadsTable({
               </Td>}
               {isVisible('tasks') && <Td>
                 <TaskCountBadge count={taskCounts?.[l.id] ?? 0} />
+              </Td>}
+              {isVisible('actions') && <Td>
+                <button
+                  onClick={() => setFollowupLead(l)}
+                  className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border text-caption text-ink-muted hover:border-primary hover:text-primary transition-colors"
+                  title="Add follow-up task for this lead"
+                >
+                  <Plus size={11} /> Follow-up
+                </button>
               </Td>}
               {isVisible('categories') && <Td>
                 {l.category ? (
@@ -418,6 +447,28 @@ export function LeadsTable({
           ))}
         </tbody>
       </table>
+
+      {/* Per-row follow-up modal — rendered once for the whole table. */}
+      <TaskFormModal
+        open={followupLead !== null}
+        initial={
+          followupLead
+            ? {
+                leadId: followupLead.id,
+                kind: 'followup',
+                context: defaultContextForStage(followupLead.stage),
+                priority: 'medium',
+              }
+            : undefined
+        }
+        lockedLeadId={followupLead?.id}
+        pending={createTask.isPending}
+        error={
+          createTask.error ? (createTask.error as Error).message : null
+        }
+        onClose={() => setFollowupLead(null)}
+        onSubmit={(input) => createTask.mutate(input)}
+      />
     </div>
   );
 }
