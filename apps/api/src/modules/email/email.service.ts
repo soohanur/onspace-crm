@@ -319,19 +319,31 @@ export class EmailService {
     const sent = log.sentAt ?? log.createdAt;
     const ageSeconds = (now.getTime() - sent.getTime()) / 1000;
 
-    // Hits within this many seconds of send are presumed to be the SENDER's
-    // own Gmail tab rendering the new outbound message (which also fetches
-    // images via GoogleImageProxy), not the recipient opening it. Empirical
-    // observation: a fresh recipient open is almost never < 5 s after send,
-    // and Gmail does NOT blindly prefetch on delivery (verified by sending
-    // an unopened control email and seeing 0 hits). For thread replies the
-    // proxy often only fetches once (caching), so the window must be tight
-    // enough to count that single legitimate hit. Default 5 s.
-    // NOTE: Gmail ALWAYS fetches images via GoogleImageProxy / ggpht.com —
-    // including for legitimate opens — so UA matching cannot distinguish
-    // prefetch from real opens. Time is the only reliable signal.
+    // Defense layer 1 — time window. Hits within this many seconds of
+    // send are presumed to be the SENDER's own Gmail tab rendering the
+    // new outbound message (which fetches the pixel via GoogleImageProxy).
+    // 5 s is the empirical sweet spot for thread replies (the proxy
+    // sometimes only fetches once, immediately).
     const prefetchWindowSeconds = Number(process.env.EMAIL_PREFETCH_WINDOW_SECONDS ?? 5);
-    const suspect = ageSeconds < prefetchWindowSeconds;
+    const isWithinPrefetchWindow = ageSeconds < prefetchWindowSeconds;
+
+    // Defense layer 2 — UA fingerprint. Gmail's link/image SCANNER (the
+    // service that pre-fetches every URL in inbound mail to scope it for
+    // malware) hits us with a doctored browser UA from Google IP ranges
+    // BEFORE the recipient ever sees the message. It uses a stable
+    // signature: `Edge/12.246` (an Edge build from 2015 that the real
+    // browser stopped shipping a decade ago) plus a duplicate trailing
+    // `Mozilla/5.0`. This is NOT the same path as the legitimate
+    // GoogleImageProxy / ggpht.com fetch a real recipient triggers when
+    // they open the email — that one we DO want to count.
+    const ua = (meta.userAgent ?? '').toLowerCase();
+    const isGmailScanner =
+      ua.includes('edge/12.246') ||
+      // The trailing-Mozilla duplicate is another reliable scanner tell.
+      /mozilla\/5\.0\s*$/i.test(meta.userAgent ?? '') &&
+        /chrome\/42\.0\.2311/i.test(meta.userAgent ?? '');
+
+    const suspect = isWithinPrefetchWindow || isGmailScanner;
 
     // Always log the hit, even if suspect.
     await this.prisma.emailPixelHit.create({
@@ -358,8 +370,13 @@ export class EmailService {
       // Stage automation: only fires on the FIRST real open (null -> set).
       await this.stageAutomation.onEmailOpened(promoted.leadId);
     } else {
+      const reason = isGmailScanner
+        ? 'GMAIL_SCANNER'
+        : isWithinPrefetchWindow
+        ? 'PREFETCH'
+        : 'ALREADY_OPENED';
       this.log.log(
-        `email ${log.id} pixel hit suspected ${suspect ? 'PREFETCH' : 'OK'} (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
+        `email ${log.id} pixel hit suspected ${reason} (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
       );
     }
   }
