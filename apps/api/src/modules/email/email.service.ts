@@ -23,6 +23,9 @@ export interface SendInput {
   /** When set, the new send is a reply continuing this email's thread. */
   replyToLogId?: string;
   attachments?: { filename: string; mimeType: string; buffer: Buffer; size: number }[];
+  /** Phase 9: when set, this send is a campaign tick. Stamped on the
+   *  EmailLog row, used by the chat drawer pill, and de-duplicated below. */
+  campaignId?: string;
 }
 
 @Injectable()
@@ -43,6 +46,26 @@ export class EmailService {
       select: { id: true, businessName: true },
     });
     if (!lead) throw new NotFoundException('Lead not found');
+
+    // Phase 9 — dedupe guard. If a campaign tick races (e.g. processor
+    // crashed and replayed), don't double-send. Return the existing
+    // sent/sending log so the caller can wire the recipient row to it.
+    if (input.campaignId) {
+      const existing = await this.prisma.emailLog.findFirst({
+        where: {
+          campaignId: input.campaignId,
+          leadId: input.leadId,
+          status: { in: ['sending', 'sent'] },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (existing) {
+        this.log.warn(
+          `campaign send dedupe: campaign=${input.campaignId} lead=${input.leadId} → returning existing log ${existing.id}`,
+        );
+        return existing;
+      }
+    }
 
     // Replying to an existing log? load it for thread + in-reply-to headers.
     let parent: { threadId: string | null; messageId: string | null; subject: string } | null = null;
@@ -76,6 +99,7 @@ export class EmailService {
         bodyHtml: input.bodyHtml ?? null,
         status: 'sending',
         provider: 'gmail',
+        campaignId: input.campaignId ?? null,
       },
     });
 
@@ -246,7 +270,10 @@ export class EmailService {
   async findOne(id: string) {
     const log = await this.prisma.emailLog.findUnique({
       where: { id },
-      include: { replies: { orderBy: { receivedAt: 'asc' } } },
+      include: {
+        replies: { orderBy: { receivedAt: 'asc' } },
+        campaign: { select: { id: true, name: true } },
+      },
     });
     if (!log) throw new NotFoundException('Email not found');
 
@@ -260,7 +287,10 @@ export class EmailService {
 
     const threadLogs = await this.prisma.emailLog.findMany({
       where: { leadId: log.leadId, threadId: log.threadId },
-      include: { replies: { orderBy: { receivedAt: 'asc' } } },
+      include: {
+        replies: { orderBy: { receivedAt: 'asc' } },
+        campaign: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
 

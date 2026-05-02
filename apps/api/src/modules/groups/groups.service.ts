@@ -110,4 +110,51 @@ export class GroupsService {
     });
     return { removed: dto.leadIds.length };
   }
+
+  /**
+   * Phase 9 — campaigns-wizard preview. Walks the group's leads and
+   * classifies each one's resolvable email source so the wizard can
+   * show "X resolved · Y duplicates · Z no email" before the user
+   * commits to a campaign.
+   */
+  async emailCoverage(id: string) {
+    const { items: leads } = await this.listLeads(id, 5000);
+    const leadIds = leads.map((l) => l.id);
+    const primaries = leadIds.length
+      ? await this.prisma.contact.findMany({
+          where: { leadId: { in: leadIds }, isPrimary: true },
+          select: { leadId: true, email: true },
+        })
+      : [];
+    const primaryEmailByLead = new Map<string, string | null>();
+    for (const p of primaries) primaryEmailByLead.set(p.leadId, p.email);
+
+    let totalLeads = leads.length;
+    let withPrimaryContactEmail = 0;
+    let withFallbackEmail = 0;
+    let noEmail = 0;
+    const seen = new Set<string>();
+    let duplicateEmails = 0;
+    for (const lead of leads) {
+      const fromContact = primaryEmailByLead.get(lead.id)?.trim() || null;
+      const fromLead = lead.email?.trim() || null;
+      const toEmail = fromContact || fromLead || null;
+      if (!toEmail) {
+        noEmail += 1;
+        continue;
+      }
+      if (fromContact) withPrimaryContactEmail += 1;
+      else withFallbackEmail += 1;
+      const k = toEmail.toLowerCase();
+      if (seen.has(k)) duplicateEmails += 1;
+      else seen.add(k);
+    }
+    return {
+      totalLeads,
+      withPrimaryContactEmail,
+      withFallbackEmail,
+      noEmail,
+      duplicateEmails,
+    };
+  }
 }

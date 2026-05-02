@@ -352,6 +352,9 @@ export interface EmailLog {
   createdAt: string;
   attachments: EmailAttachment[];
   replies?: EmailReply[];
+  /** Phase 9: present on findOne response if this email was sent by a campaign. */
+  campaignId?: string | null;
+  campaign?: { id: string; name: string } | null;
   // Thread-aggregate metadata (present in list responses)
   threadMessageCount?: number;
   threadOurReplyCount?: number;
@@ -359,6 +362,127 @@ export interface EmailLog {
   threadLatestActivity?: string;
   // Full chronological thread (present in findOne response)
   messages?: ThreadMessage[];
+}
+
+// ─── Phase 9: Email templates + campaigns ────────────────────────────────
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateInput {
+  name: string;
+  description?: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml?: string;
+}
+
+export type UpdateTemplateInput = Partial<CreateTemplateInput>;
+
+export type CampaignStatus =
+  | 'draft'
+  | 'queued'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type CampaignRecipientStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'skipped'
+  | 'bounced';
+
+export interface CampaignSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  status: CampaignStatus;
+  groupId: string;
+  templateId: string;
+  accountId: string;
+  frozenSubject: string | null;
+  frozenBodyText: string | null;
+  frozenBodyHtml: string | null;
+  dailySendLimit: number;
+  sendIntervalSec: number;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  group?: { id: string; name: string };
+  template?: { id: string; name: string };
+  account?: { id: string; email: string; displayName: string | null };
+  /** Computed in the response — joins email_logs. */
+  openedCount: number;
+  repliedCount: number;
+  bouncedCount: number;
+}
+
+export interface CampaignRecipient {
+  id: string;
+  campaignId: string;
+  leadId: string;
+  contactId: string | null;
+  toEmail: string;
+  renderedSubject: string | null;
+  renderedBodyText: string | null;
+  renderedBodyHtml: string | null;
+  status: CampaignRecipientStatus;
+  emailLogId: string | null;
+  error: string | null;
+  attemptedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lead?: { id: string; businessName: string; stage: LeadStage };
+  contact?: { id: string; name: string } | null;
+}
+
+export interface CreateCampaignInput {
+  name: string;
+  description?: string;
+  groupId: string;
+  templateId: string;
+  accountId: string;
+  dailySendLimit?: number;
+  sendIntervalSec?: number;
+}
+
+export interface CampaignCreateResponse {
+  campaign: CampaignSummary;
+  resolution: {
+    resolved: number;
+    skippedNoEmail: number;
+    dedupedDuplicates: number;
+  };
+}
+
+export interface CampaignStartResponse {
+  campaign: CampaignSummary;
+  wouldSkip: number;
+}
+
+export interface GroupEmailCoverage {
+  totalLeads: number;
+  withPrimaryContactEmail: number;
+  withFallbackEmail: number;
+  noEmail: number;
+  duplicateEmails: number;
 }
 
 export interface SendEmailInput {
@@ -604,4 +728,63 @@ export const api = {
 
   attachmentDownloadUrl: (logId: string, filename: string) =>
     `${BASE}/api/email/logs/${logId}/attachments/${encodeURIComponent(filename)}`,
+
+  // ─── Phase 9: Templates ────────────────────────────────────────────────
+  listTemplates: () => request<EmailTemplate[]>('/templates'),
+  getTemplate: (id: string) => request<EmailTemplate>(`/templates/${id}`),
+  createTemplate: (input: CreateTemplateInput) =>
+    request<EmailTemplate>('/templates', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateTemplate: (id: string, patch: UpdateTemplateInput) =>
+    request<EmailTemplate>(`/templates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteTemplate: (id: string) =>
+    request<{ ok: true }>(`/templates/${id}`, { method: 'DELETE' }),
+
+  // ─── Phase 9: Campaigns ────────────────────────────────────────────────
+  listCampaigns: (params: { status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    return request<CampaignSummary[]>(`/campaigns?${qs.toString()}`);
+  },
+  getCampaign: (id: string) => request<CampaignSummary>(`/campaigns/${id}`),
+  createCampaign: (input: CreateCampaignInput) =>
+    request<CampaignCreateResponse>('/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  startCampaign: (id: string, acceptSkipped = false) =>
+    request<CampaignStartResponse>(
+      `/campaigns/${id}/start${acceptSkipped ? '?acceptSkipped=1' : ''}`,
+      { method: 'POST' },
+    ),
+  pauseCampaign: (id: string) =>
+    request<CampaignSummary>(`/campaigns/${id}/pause`, { method: 'POST' }),
+  resumeCampaign: (id: string) =>
+    request<CampaignSummary>(`/campaigns/${id}/resume`, { method: 'POST' }),
+  cancelCampaign: (id: string) =>
+    request<CampaignSummary>(`/campaigns/${id}/cancel`, { method: 'POST' }),
+  deleteCampaign: (id: string) =>
+    request<{ ok: true }>(`/campaigns/${id}`, { method: 'DELETE' }),
+  listCampaignRecipients: (
+    id: string,
+    params: { status?: string; take?: number; cursor?: string } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.take) qs.set('take', String(params.take));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    return request<{ items: CampaignRecipient[]; nextCursor: string | null }>(
+      `/campaigns/${id}/recipients?${qs.toString()}`,
+    );
+  },
+
+  getGroupEmailCoverage: (groupId: string) =>
+    request<GroupEmailCoverage>(`/groups/${groupId}/email-coverage`),
+  getAccountTodayCount: (accountId: string) =>
+    request<{ sentToday: number }>(`/email/accounts/${accountId}/today-count`),
 };

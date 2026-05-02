@@ -13,6 +13,8 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { EmailModule } from './modules/email/email.module';
+import { TemplatesModule } from './modules/templates/templates.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { EmailModule } from './modules/email/email.module';
     TasksModule,
     AutomationModule,
     EmailModule,
+    TemplatesModule,
+    CampaignsModule,
   ],
   controllers: [HealthController],
 })

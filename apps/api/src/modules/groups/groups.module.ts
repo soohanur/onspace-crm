@@ -7,5 +7,6 @@ import { GroupsService } from './groups.service';
   imports: [LeadsModule],
   controllers: [GroupsController],
   providers: [GroupsService],
+  exports: [GroupsService],
 })
 export class GroupsModule {}

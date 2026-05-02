@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, EmailLog, Lead, ThreadMessage } from '@/lib/api';
 import { Chip } from '../ui/Chip';
@@ -109,8 +110,18 @@ export function EmailDetailDrawer({
           <div className="flex items-center gap-2 min-w-0">
             <Mail size={16} className="text-primary shrink-0" />
             <div className="min-w-0">
-              <div className="font-medium truncate">
-                {email?.subject ?? 'Loading…'}
+              <div className="font-medium truncate flex items-center gap-2 flex-wrap">
+                <span className="truncate">{email?.subject ?? 'Loading…'}</span>
+                {email?.campaign && (
+                  <Link
+                    href={`/campaigns/${email.campaign.id}`}
+                    className="inline-flex items-center h-5 px-1.5 rounded-md bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/15 truncate"
+                    title={`From campaign: ${email.campaign.name}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    From campaign: {email.campaign.name}
+                  </Link>
+                )}
               </div>
               <div className="text-caption text-ink-muted truncate">
                 {messages.length > 0

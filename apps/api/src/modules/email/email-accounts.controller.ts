@@ -9,6 +9,7 @@ import {
 import type { Response } from 'express';
 import { EmailAccountsService } from './email-accounts.service';
 import { TunnelService } from './tunnel.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 /** Mask middle of an OAuth client id so we can display it without leaking it. */
 function mask(s: string): string {
@@ -21,6 +22,7 @@ export class EmailAccountsController {
   constructor(
     private readonly accounts: EmailAccountsService,
     private readonly tunnel: TunnelService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -100,5 +102,22 @@ export class EmailAccountsController {
   @Delete('accounts/:id')
   remove(@Param('id') id: string) {
     return this.accounts.disconnect(id);
+  }
+
+  /**
+   * How many emails this account has sent today (UTC start-of-day).
+   * Used by the campaigns wizard to show remaining cap before start.
+   */
+  @Get('accounts/:id/today-count')
+  async todayCount(@Param('id') id: string) {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const sentToday = await this.prisma.emailLog.count({
+      where: {
+        accountId: id,
+        sentAt: { gte: startOfDay },
+      },
+    });
+    return { sentToday };
   }
 }

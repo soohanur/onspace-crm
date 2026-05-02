@@ -49,6 +49,11 @@ export class GroupsController {
     return this.groups.listLeads(id, take ? Number(take) : undefined, cursor);
   }
 
+  @Get(':id/email-coverage')
+  emailCoverage(@Param('id') id: string) {
+    return this.groups.emailCoverage(id);
+  }
+
   @Post(':id/leads')
   addLeads(@Param('id') id: string, @Body() dto: GroupLeadIdsDto) {
     return this.groups.addLeads(id, dto);
