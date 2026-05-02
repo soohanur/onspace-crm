@@ -1,20 +1,29 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import {
   CreateTemplateInput,
   EmailTemplate,
 } from '@/lib/api';
 import {
-  SAMPLE_PREVIEW_CONTEXT,
   SUPPORTED_TAGS,
-  previewRender,
 } from '@/lib/campaigns';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { X } from 'lucide-react';
+import { TemplatePreview } from './TemplatePreview';
 
-/** Create/edit a template with live preview. */
+type ContentTab = 'text' | 'html';
+
+/**
+ * Create / edit a template with separate text & HTML editors and a live
+ * responsive preview (desktop / phone). Both bodies are saved on the
+ * template — the campaign tick will prefer HTML when present and fall
+ * back to text. The HTML preview renders the user's own raw HTML in an
+ * iframe-like container; we already trust the author (this is internal
+ * tooling, no external untrusted input).
+ */
 export function TemplateFormModal({
   open,
   initial,
@@ -38,6 +47,8 @@ export function TemplateFormModal({
     bodyHtml: '',
   });
 
+  const [contentTab, setContentTab] = useState<ContentTab>('text');
+
   useEffect(() => {
     if (!open) return;
     setForm({
@@ -47,6 +58,8 @@ export function TemplateFormModal({
       bodyText: initial?.bodyText ?? '',
       bodyHtml: initial?.bodyHtml ?? '',
     });
+    // Default to HTML view if the template already has HTML content.
+    setContentTab(initial?.bodyHtml ? 'html' : 'text');
   }, [open, initial]);
 
   if (!open) return null;
@@ -57,13 +70,12 @@ export function TemplateFormModal({
     form.bodyText.trim().length > 0 &&
     !pending;
 
-  const previewSubject = previewRender(form.subject, SAMPLE_PREVIEW_CONTEXT);
-  const previewBody = previewRender(form.bodyText, SAMPLE_PREVIEW_CONTEXT);
+  const hasHtml = (form.bodyHtml ?? '').trim().length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-surface border border-border rounded-lg shadow-e3 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-surface border border-border rounded-lg shadow-e3 w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
         <header className="px-5 py-3.5 border-b border-border flex items-center justify-between shrink-0">
           <h2 className="text-h3">{isEdit ? 'Edit template' : 'New template'}</h2>
           <button
@@ -83,10 +95,12 @@ export function TemplateFormModal({
                 ...form,
                 name: form.name.trim(),
                 description: form.description?.trim() || undefined,
+                bodyHtml: hasHtml ? form.bodyHtml : undefined,
               });
             }
           }}
         >
+          {/* ─── Editor side ─── */}
           <div className="p-5 space-y-3 border-r border-border">
             <Field label="Name *">
               <Input
@@ -110,18 +124,60 @@ export function TemplateFormModal({
                 placeholder="Quick question for {{businessName}}"
               />
             </Field>
-            <Field label="Body (text) *">
-              <textarea
-                value={form.bodyText}
-                onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
-                rows={10}
-                required
-                placeholder={`Hi {{firstName}},\n\nI noticed {{businessName}} ...`}
-                className="w-full px-3 py-2 text-bodysm rounded-md border border-border bg-surface placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-none font-mono"
-              />
-            </Field>
+
+            {/* Content tabs: Text | HTML */}
+            <div>
+              <div className="flex items-center gap-2 border-b border-border mb-2">
+                <TabButton
+                  active={contentTab === 'text'}
+                  onClick={() => setContentTab('text')}
+                >
+                  Text body *
+                </TabButton>
+                <TabButton
+                  active={contentTab === 'html'}
+                  onClick={() => setContentTab('html')}
+                >
+                  HTML body
+                  <span className="ml-1.5 text-[10px] text-neutral font-normal">
+                    {hasHtml ? '(set)' : '(optional)'}
+                  </span>
+                </TabButton>
+              </div>
+
+              {contentTab === 'text' ? (
+                <textarea
+                  value={form.bodyText}
+                  onChange={(e) => setForm({ ...form, bodyText: e.target.value })}
+                  rows={14}
+                  required
+                  placeholder={'Hi {{firstName}},\n\nI noticed {{businessName}} ...'}
+                  className="w-full px-3 py-2 text-bodysm rounded-md border border-border bg-surface placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-y font-mono"
+                />
+              ) : (
+                <>
+                  <textarea
+                    value={form.bodyHtml ?? ''}
+                    onChange={(e) => setForm({ ...form, bodyHtml: e.target.value })}
+                    rows={14}
+                    placeholder={
+                      '<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#050F1A">\n  <p>Hi {{firstName}},</p>\n  <p>I noticed {{businessName}} ...</p>\n</div>'
+                    }
+                    className="w-full px-3 py-2 text-bodysm rounded-md border border-border bg-surface placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-y font-mono"
+                  />
+                  <div className="text-caption text-ink-muted mt-1">
+                    Optional. When present, this is what most clients render
+                    (Gmail, Outlook, Apple Mail). The text body is a fallback
+                    for plain-text-only readers.
+                  </div>
+                </>
+              )}
+            </div>
+
             <details className="text-bodysm">
-              <summary className="cursor-pointer text-neutral hover:text-ink">Available merge tags</summary>
+              <summary className="cursor-pointer text-neutral hover:text-ink">
+                Available merge tags
+              </summary>
               <ul className="mt-2 space-y-1">
                 {SUPPORTED_TAGS.map((t) => (
                   <li key={t.tag} className="flex items-baseline gap-2">
@@ -134,11 +190,13 @@ export function TemplateFormModal({
                 ))}
               </ul>
             </details>
+
             {error && (
               <div className="text-caption text-error" title={error}>
                 {error}
               </div>
             )}
+
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 type="button"
@@ -153,18 +211,25 @@ export function TemplateFormModal({
               </Button>
             </div>
           </div>
-          <div className="p-5 space-y-3 bg-background">
-            <div className="text-caption uppercase tracking-wider text-neutral">
-              Live preview (sample lead)
+
+          {/* ─── Preview side ─── */}
+          <div className="p-5 bg-background flex flex-col min-h-0">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="text-caption uppercase tracking-wider text-neutral">
+                Live preview
+              </div>
+              <span className="text-caption text-ink-muted">
+                · sample lead "Acme Plumbing"
+              </span>
             </div>
-            <div className="rounded-md border border-border bg-surface p-4">
-              <div className="text-caption text-neutral mb-1">Subject</div>
-              <div className="font-medium text-ink mb-3">{previewSubject || '(empty)'}</div>
-              <div className="text-caption text-neutral mb-1">Body</div>
-              <pre className="whitespace-pre-wrap text-bodysm font-sans text-ink">
-                {previewBody || '(empty)'}
-              </pre>
-            </div>
+            <TemplatePreview
+              subject={form.subject}
+              bodyText={form.bodyText}
+              bodyHtml={form.bodyHtml ?? ''}
+              contentTabOverride={contentTab}
+              onContentTabChange={setContentTab}
+              className="flex-1 min-h-[420px]"
+            />
           </div>
         </form>
       </div>
@@ -172,7 +237,13 @@ export function TemplateFormModal({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <div className="text-caption uppercase tracking-wider text-neutral mb-1">
@@ -182,3 +253,29 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        'h-9 px-3 text-bodysm font-medium border-b-2 -mb-px',
+        active
+          ? 'border-primary text-primary'
+          : 'border-transparent text-ink-muted hover:text-ink',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+

@@ -16,14 +16,11 @@ import {
   GroupEmailCoverage,
   LeadGroup,
 } from '@/lib/api';
-import {
-  SAMPLE_PREVIEW_CONTEXT,
-  previewRender,
-} from '@/lib/campaigns';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { TemplateFormModal } from '@/components/campaigns/TemplateFormModal';
+import { TemplatePreview } from '@/components/campaigns/TemplatePreview';
 import { ArrowLeft, ArrowRight, Plus } from 'lucide-react';
 
 export default function CampaignWizardPage() {
@@ -261,21 +258,17 @@ function Body() {
               </Button>
             </div>
           </Card>
-          <Card>
+          <Card className="!p-4 flex flex-col min-h-[480px]">
             <div className="text-caption uppercase tracking-wider text-neutral mb-2">
               Preview (sample lead)
             </div>
             {selectedTemplate ? (
-              <div className="rounded-md border border-border bg-background p-4">
-                <div className="text-caption text-neutral mb-1">Subject</div>
-                <div className="font-medium text-ink mb-3">
-                  {previewRender(selectedTemplate.subject, SAMPLE_PREVIEW_CONTEXT)}
-                </div>
-                <div className="text-caption text-neutral mb-1">Body</div>
-                <pre className="whitespace-pre-wrap text-bodysm font-sans text-ink">
-                  {previewRender(selectedTemplate.bodyText, SAMPLE_PREVIEW_CONTEXT)}
-                </pre>
-              </div>
+              <TemplatePreview
+                subject={selectedTemplate.subject}
+                bodyText={selectedTemplate.bodyText}
+                bodyHtml={selectedTemplate.bodyHtml ?? ''}
+                className="flex-1"
+              />
             ) : (
               <div className="text-bodysm text-ink-muted py-8 text-center">
                 Select a template to see the rendered preview.
