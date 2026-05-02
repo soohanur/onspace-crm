@@ -1,0 +1,9 @@
+{
+  "name": "@onspace/scraper",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/playwright install chromium",
+    "run": ".venv/bin/python -m scraper.main"
+  }
+}

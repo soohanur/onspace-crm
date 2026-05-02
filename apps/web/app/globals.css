@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  background-color: #F9FAFB;
+  color: #050F1A;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar polish for data-dense tables */
+.scroll-thin::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: #8A919E;
+}
+
+/* New-row flash for live scrape monitor */
+@keyframes rowFlash {
+  0%   { background-color: rgba(0, 82, 255, 0.10); }
+  100% { background-color: transparent; }
+}
+.animate-row-flash {
+  animation: rowFlash 2.2s ease-out;
+}

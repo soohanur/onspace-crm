@@ -1,0 +1,121 @@
+// Phase 1 (MVP) — Lead scraping only.
+// Future phases will add: tenants, users, contacts (multiple per lead),
+// activities, tasks, groups, campaigns, workflows, custom_fields, etc.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScrapeJobStatus {
+  queued
+  running
+  done
+  failed
+  cancelled
+}
+
+model ScrapeJob {
+  id             String          @id @default(uuid())
+  source         String          @default("yellowpages")
+  searchQuery    String          @map("search_query")
+  searchLocation String          @map("search_location")
+  status         ScrapeJobStatus @default(queued)
+  totalFound     Int             @default(0) @map("total_found")
+  totalSaved     Int             @default(0) @map("total_saved")
+  error          String?
+  startedAt      DateTime?       @map("started_at")
+  finishedAt    DateTime?       @map("finished_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  leads Lead[]
+
+  @@index([status])
+  @@index([searchQuery, searchLocation])
+  @@map("scrape_jobs")
+}
+
+model Lead {
+  id             String   @id @default(uuid())
+  jobId          String?  @map("job_id")
+
+  // Source provenance
+  source         String   @default("yellowpages")
+  sourceUrl      String?  @map("source_url")
+  externalId     String?  @map("external_id")
+
+  // Search context (denormalized for fast filtering / autocomplete)
+  searchQuery    String   @map("search_query")
+  searchLocation String   @map("search_location")
+
+  // Core business fields
+  businessName   String   @map("business_name")
+  category       String?           // primary category
+  categories     String[]          @default([])  // all categories listed
+  phone          String?
+  phones         String[]          @default([])  // additional phones
+  fax            String?
+  email          String?
+  emails         String[]          @default([])  // all harvested emails
+  website        String?
+
+  // Address
+  address        String?
+  address2       String?
+  city           String?
+  state          String?
+  postalCode     String?  @map("postal_code")
+  country        String?  @default("US")
+  latitude       Float?
+  longitude      Float?
+
+  // Business profile (slim — kept only what we use in CRM lead lists)
+  description    String?  @db.Text   // "General Info" paragraph from YP
+  businessHistory String? @db.Text  @map("business_history")
+  yearEstablished Int?    @map("year_established")
+  neighborhoods  String[] @default([])
+  rating         Float?
+  reviewCount    Int?     @map("review_count")
+  bbbGrade       String?  @map("bbb_grade")
+  yearsInBusiness Int?    @map("years_in_business")
+  yearsWithYP    Int?     @map("years_with_yp")
+  claimed        Boolean  @default(false)
+  photos         String[] @default([])
+  logoUrl        String?  @map("logo_url")
+  bannerUrl      String?  @map("banner_url")
+  otherLinks     String[] @default([]) @map("other_links")  // additional websites
+
+  // All unique social URLs found across YP listing + business website.
+  // Frontend classifies platform from the URL host at render time.
+  socials        String[] @default([])
+
+  // Owner enrichment (best-effort)
+  ownerName      String?  @map("owner_name")
+  ownerEmail     String?  @map("owner_email")
+  ownerPhone     String?  @map("owner_phone")
+  ownerLinkedin  String?  @map("owner_linkedin")
+  ownerSearchUrl String?  @map("owner_search_url")  // pre-built Google query for owner discovery
+
+  // Dedup hash: sha1(lower(business_name) + normalize(phone) + normalize(address))
+  dedupHash      String?  @map("dedup_hash")
+
+  // Original parsed payload for debugging / re-processing
+  rawPayload     Json?    @map("raw_payload")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  job ScrapeJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@unique([source, dedupHash])
+  @@index([searchQuery, searchLocation])
+  @@index([city, state])
+  @@index([website])
+  @@index([createdAt])
+  @@map("leads")
+}

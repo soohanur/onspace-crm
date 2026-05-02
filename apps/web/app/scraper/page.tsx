@@ -1,0 +1,266 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ScrapeJob } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
+import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import { Autocomplete } from '@/components/Autocomplete';
+import { LeadsTable } from '@/components/LeadsTable';
+import { Loader2, Play, Square } from 'lucide-react';
+
+export default function LeadScraperPage() {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState('');
+  const [location, setLocation] = useState('');
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [hasWebsite, setHasWebsite] = useState<'all' | 'true' | 'false'>('all');
+  const [hasEmail, setHasEmail] = useState<'all' | 'true' | 'false'>('all');
+  const [tableQ, setTableQ] = useState('');
+
+  // Restore last active job id on mount (so refresh keeps showing the running scrape).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('onspace.activeJobId');
+    if (saved) setActiveJobId(saved);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeJobId) localStorage.setItem('onspace.activeJobId', activeJobId);
+  }, [activeJobId]);
+
+  const startJob = useMutation({
+    mutationFn: () =>
+      api.createScrapeJob({
+        searchQuery: query.trim(),
+        searchLocation: location.trim(),
+      }),
+    onSuccess: (job) => {
+      setActiveJobId(job.id);
+      qc.invalidateQueries({ queryKey: ['scrape-jobs'] });
+    },
+  });
+
+  const cancelJob = useMutation({
+    mutationFn: (id: string) => api.cancelScrapeJob(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scrape-job', activeJobId] });
+    },
+  });
+
+  const { data: job } = useQuery<ScrapeJob | undefined>({
+    queryKey: ['scrape-job', activeJobId],
+    queryFn: () => (activeJobId ? api.getScrapeJob(activeJobId) : Promise.resolve(undefined)),
+    enabled: !!activeJobId,
+    refetchInterval: (q) => {
+      const status = (q.state.data as ScrapeJob | undefined)?.status;
+      return status === 'queued' || status === 'running' ? 1000 : false;
+    },
+  });
+
+  const isLive =
+    job?.status === 'running' || job?.status === 'queued';
+
+  const { data: stats } = useQuery({
+    queryKey: ['leads-stats', activeJobId],
+    queryFn: () => api.leadStats(activeJobId ? { jobId: activeJobId } : {}),
+    enabled: !!activeJobId,
+    refetchInterval: isLive ? 1000 : false,
+  });
+
+  const { data: leads } = useQuery({
+    queryKey: ['leads-by-job', activeJobId, hasWebsite, hasEmail, tableQ],
+    queryFn: () =>
+      activeJobId
+        ? api.listLeads({
+            jobId: activeJobId,
+            hasWebsite: hasWebsite === 'all' ? undefined : hasWebsite,
+            hasEmail: hasEmail === 'all' ? undefined : hasEmail,
+            q: tableQ || undefined,
+            take: 200,
+          })
+        : Promise.resolve({ items: [], nextCursor: null }),
+    enabled: !!activeJobId,
+    refetchInterval: isLive ? 1000 : false,
+  });
+
+  const isRunning = job?.status === 'running' || job?.status === 'queued';
+  const canSubmit =
+    query.trim().length >= 2 && location.trim().length >= 2 && !startJob.isPending && !isRunning;
+
+  return (
+    <div className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
+      <div>
+        <h1 className="text-h1 mb-2">Lead Scraper</h1>
+        <p className="text-ink-muted text-bodysm">
+          Scrape YellowPages by category + location. Results stream in below.
+        </p>
+      </div>
+
+      {/* Form */}
+      <Card>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <div className="md:col-span-5">
+            <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
+              Category
+            </label>
+            <Autocomplete
+              value={query}
+              onChange={setQuery}
+              placeholder="e.g. plumber, dentist, roofing"
+              fetchSuggestions={api.suggestQueries}
+            />
+          </div>
+          <div className="md:col-span-5">
+            <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
+              Location
+            </label>
+            <Autocomplete
+              value={location}
+              onChange={setLocation}
+              placeholder="e.g. New York, NY"
+              fetchSuggestions={api.suggestLocations}
+            />
+          </div>
+          <div className="md:col-span-2">
+            {isRunning ? (
+              <Button
+                variant="secondary"
+                onClick={() => activeJobId && cancelJob.mutate(activeJobId)}
+                disabled={cancelJob.isPending}
+                className="w-full !text-error !border-error hover:!bg-errorBg"
+              >
+                {cancelJob.isPending ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Stopping…
+                  </>
+                ) : (
+                  <>
+                    <Square size={14} className="fill-error" />
+                    Stop Scrape
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => startJob.mutate()}
+                disabled={!canSubmit}
+                className="w-full"
+              >
+                {startJob.isPending ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Starting…
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} />
+                    Start Scrape
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 text-caption text-ink-muted">
+          Scrapes <span className="font-medium text-ink">every business</span> for the
+          category + location until YellowPages stops returning results.
+        </div>
+        {startJob.error && (
+          <div className="mt-3 text-error text-bodysm">
+            {(startJob.error as Error).message}
+          </div>
+        )}
+      </Card>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Stat
+          label="Status"
+          value={
+            <Chip
+              tone={
+                job?.status === 'done'
+                  ? 'positive'
+                  : job?.status === 'failed'
+                  ? 'negative'
+                  : job?.status === 'running' || job?.status === 'queued'
+                  ? 'primary'
+                  : 'neutral'
+              }
+            >
+              {job?.status ?? 'idle'}
+            </Chip>
+          }
+        />
+        <Stat label="Found" value={job?.totalFound ?? 0} />
+        <Stat label="Saved" value={stats?.total ?? 0} />
+        <Stat label="With Website" value={stats?.withWebsite ?? 0} />
+        <Stat label="With Email" value={stats?.withEmail ?? 0} />
+      </div>
+
+      {/* Live activity strip */}
+      {isLive && (
+        <Card className="!py-3 flex items-center gap-3">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
+          </span>
+          <div className="text-bodysm">
+            <span className="font-medium text-ink">Scraping live</span>
+            <span className="text-ink-muted">
+              {' '}— last saved:{' '}
+              <span className="text-ink">
+                {leads?.items[0]?.businessName ?? 'waiting for first result…'}
+              </span>
+            </span>
+          </div>
+          <div className="ml-auto text-caption text-neutral font-mono font-tabular">
+            polling every 1s
+          </div>
+        </Card>
+      )}
+
+      {/* Live results */}
+      <Card className="p-0 overflow-hidden">
+        <div className="p-4 border-b border-border flex flex-wrap gap-3 items-center">
+          <Input
+            placeholder="Filter results…"
+            value={tableQ}
+            onChange={(e) => setTableQ(e.target.value)}
+            className="max-w-[280px]"
+          />
+          <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value as any)}>
+            <option value="all">Website: All</option>
+            <option value="true">Has website</option>
+            <option value="false">No website</option>
+          </Select>
+          <Select value={hasEmail} onChange={(e) => setHasEmail(e.target.value as any)}>
+            <option value="all">Email: All</option>
+            <option value="true">Has email</option>
+            <option value="false">No email</option>
+          </Select>
+          <div className="ml-auto text-bodysm text-ink-muted font-tabular">
+            {leads?.items.length ?? 0} rows
+          </div>
+        </div>
+        <LeadsTable leads={leads?.items ?? []} />
+      </Card>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Card>
+      <div className="text-caption uppercase tracking-wider text-neutral mb-2">
+        {label}
+      </div>
+      <div className="text-h2 font-mono font-tabular">{value}</div>
+    </Card>
+  );
+}
