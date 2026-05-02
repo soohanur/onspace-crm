@@ -135,6 +135,56 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* Tracking pixel reachability */}
+      {config && !config.trackingReachable && (
+        <Card className="border-warning/40 bg-[#FEF4E5]">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={16} className="text-warning shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="font-medium text-ink mb-1">
+                Open tracking won't work yet
+              </div>
+              <p className="text-bodysm text-ink-muted mb-2">
+                We embed a 1×1 tracking pixel in outbound HTML emails. Right now
+                that pixel points to{' '}
+                <span className="font-mono text-ink">{config.publicApiUrl}</span>,
+                which the recipient's email client (and Gmail's image proxy)
+                can't reach. So <span className="font-medium text-ink">openedAt</span>{' '}
+                stays null forever.
+              </p>
+              <p className="text-bodysm text-ink-muted mb-2">
+                <span className="font-medium text-ink">Fix:</span> expose your API
+                via a public URL and set <span className="font-mono">PUBLIC_API_URL</span>{' '}
+                in <span className="font-mono">.env</span>, then restart. For local dev
+                the easiest tunnel is{' '}
+                <a
+                  href="https://ngrok.com/download"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  ngrok
+                </a>:
+              </p>
+              <pre className="text-caption font-mono bg-surface border border-border rounded-md p-2 mb-2 overflow-x-auto">
+{`# 1) Run a tunnel pointing at the API:
+ngrok http 4000
+
+# 2) Copy the https URL it gives you (e.g. https://abc123.ngrok.io)
+#    and add to .env:
+PUBLIC_API_URL="https://abc123.ngrok.io"
+
+# 3) Restart the API.`}
+              </pre>
+              <p className="text-caption text-neutral">
+                Until then, every other Phase 3 feature works fine — replies are
+                fetched server-side via Gmail API and don't need a public URL.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Accounts */}
       <Card>
         <div className="flex items-start justify-between gap-4 mb-4">

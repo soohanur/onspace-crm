@@ -76,8 +76,12 @@ export function LeadEmailHistory({
 }
 
 function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void }) {
-  const ts = email.sentAt ?? email.createdAt;
-  const replyCount = email.replies?.length ?? 0;
+  const sentTs = email.sentAt ?? email.createdAt;
+  const latestTs = email.threadLatestActivity ?? sentTs;
+  const totalMessages = email.threadMessageCount ?? 1;
+  const inboundReplies = email.threadInboundReplyCount ?? (email.replies?.length ?? 0);
+  const ourReplies = email.threadOurReplyCount ?? 0;
+
   return (
     <button
       type="button"
@@ -90,9 +94,14 @@ function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void })
           <div className="flex items-center gap-2 flex-wrap">
             <div className="font-medium text-ink truncate">{email.subject}</div>
             <StatusChip status={email.status} />
-            {replyCount > 0 && (
+            {totalMessages > 1 && (
               <Chip tone="primary" className="!h-5 !text-[11px]">
-                <Reply size={10} className="mr-1" /> {replyCount}
+                {totalMessages} messages
+              </Chip>
+            )}
+            {inboundReplies > 0 && (
+              <Chip tone="positive" className="!h-5 !text-[11px]">
+                <Reply size={10} className="mr-1" /> {inboundReplies} reply{inboundReplies > 1 ? 'ies' : ''}
               </Chip>
             )}
             {email.attachments.length > 0 && (
@@ -113,10 +122,16 @@ function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void })
           <div className="mt-1 text-caption">
             <OpenedIndicator openedAt={email.openedAt} />
           </div>
-          <div className="text-caption text-neutral font-mono font-tabular mt-0.5 inline-flex items-center gap-1">
+          <div className="text-caption text-neutral font-mono font-tabular mt-0.5 inline-flex items-center gap-1 flex-wrap">
             <Clock size={10} />
-            sent {new Date(ts).toLocaleString()}
-            <span> · from {email.fromEmail}</span>
+            sent {new Date(sentTs).toLocaleString()}
+            {totalMessages > 1 && (
+              <span>· latest {new Date(latestTs).toLocaleString()}</span>
+            )}
+            <span>· from {email.fromEmail}</span>
+            {ourReplies > 0 && (
+              <span className="text-primary">· you replied {ourReplies}×</span>
+            )}
           </div>
           {email.status === 'failed' && email.error && (
             <div className="mt-1 text-caption text-error truncate" title={email.error}>

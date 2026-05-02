@@ -30,12 +30,26 @@ export class EmailAccountsController {
     const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI ?? '';
     const hasSecret = !!process.env.GOOGLE_CLIENT_SECRET;
     const hasEncKey = !!process.env.EMAIL_TOKEN_ENC_KEY;
+
+    // Pixel tracking only works when the URL we embed in outbound emails
+    // is reachable from the recipient's email client / Gmail's image proxy.
+    // Localhost obviously isn't.
+    const publicApiUrl =
+      process.env.PUBLIC_API_URL ||
+      `http://localhost:${process.env.API_PORT || 4000}`;
+    const trackingPixelUrl = `${publicApiUrl}/api/email/track/{id}.gif`;
+    const trackingReachable =
+      !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(publicApiUrl);
+
     return {
       configured: !!(clientId && hasSecret && redirectUri && hasEncKey),
       clientIdMasked: clientId ? mask(clientId) : null,
       redirectUri,
       hasSecret,
       hasEncKey,
+      publicApiUrl,
+      trackingPixelUrl,
+      trackingReachable,
       successRedirect:
         process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? 'http://localhost:3000/settings',
     };

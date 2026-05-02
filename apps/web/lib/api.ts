@@ -164,6 +164,25 @@ export interface EmailReply {
   createdAt: string;
 }
 
+export interface ThreadMessage {
+  id: string;
+  type: 'log' | 'reply';
+  direction: 'outbound' | 'inbound';
+  timestamp: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string | null;
+  cc: string[];
+  subject: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  snippet?: string | null;
+  attachments: EmailAttachment[];
+  status?: EmailStatus;
+  openedAt?: string | null;
+  error?: string | null;
+}
+
 export interface EmailLog {
   id: string;
   leadId: string;
@@ -187,6 +206,13 @@ export interface EmailLog {
   createdAt: string;
   attachments: EmailAttachment[];
   replies?: EmailReply[];
+  // Thread-aggregate metadata (present in list responses)
+  threadMessageCount?: number;
+  threadOurReplyCount?: number;
+  threadInboundReplyCount?: number;
+  threadLatestActivity?: string;
+  // Full chronological thread (present in findOne response)
+  messages?: ThreadMessage[];
 }
 
 export interface SendEmailInput {
@@ -310,6 +336,9 @@ export const api = {
       redirectUri: string;
       hasSecret: boolean;
       hasEncKey: boolean;
+      publicApiUrl: string;
+      trackingPixelUrl: string;
+      trackingReachable: boolean;
       successRedirect: string;
     }>('/email/config'),
 

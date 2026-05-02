@@ -147,34 +147,147 @@ export class EmailService {
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // Reads
+  // Reads — thread-grouped
   // ──────────────────────────────────────────────────────────────────────
 
+  /**
+   * Per-lead history. Returns ONE row per thread (the root log) with thread
+   * metadata. Outbound replies don't show up as separate rows. The drawer
+   * fetches the full thread via findOne(rootLogId).
+   */
   async listForLead(leadId: string, take = 50) {
     const lead = await this.prisma.lead.findUnique({
       where: { id: leadId },
       select: { id: true },
     });
     if (!lead) throw new NotFoundException('Lead not found');
-    return this.prisma.emailLog.findMany({
+
+    const allLogs = await this.prisma.emailLog.findMany({
       where: { leadId },
-      orderBy: { createdAt: 'desc' },
-      take,
-      include: {
-        replies: { orderBy: { receivedAt: 'asc' } },
-      },
+      orderBy: { createdAt: 'asc' },
+      include: { replies: { orderBy: { receivedAt: 'asc' } } },
     });
+
+    type LogRow = (typeof allLogs)[number];
+    const groups = new Map<string, LogRow[]>();
+    const orphans: LogRow[] = [];
+
+    for (const log of allLogs) {
+      if (!log.threadId) {
+        orphans.push(log);
+        continue;
+      }
+      const arr = groups.get(log.threadId) ?? [];
+      arr.push(log);
+      groups.set(log.threadId, arr);
+    }
+
+    const headers: any[] = [];
+
+    for (const logs of groups.values()) {
+      const root = logs[0];
+      const allReplies = logs.flatMap((l) => l.replies ?? []);
+      const ourReplyCount = logs.length - 1;
+      const inboundReplyCount = allReplies.length;
+      const total = logs.length + inboundReplyCount;
+
+      let latest = new Date(root.sentAt ?? root.createdAt).getTime();
+      for (const l of logs) {
+        const t = new Date(l.sentAt ?? l.createdAt).getTime();
+        if (t > latest) latest = t;
+      }
+      for (const r of allReplies) {
+        const t = new Date(r.receivedAt).getTime();
+        if (t > latest) latest = t;
+      }
+
+      headers.push({
+        ...root,
+        replies: allReplies,
+        threadMessageCount: total,
+        threadOurReplyCount: ourReplyCount,
+        threadInboundReplyCount: inboundReplyCount,
+        threadLatestActivity: new Date(latest).toISOString(),
+      });
+    }
+
+    for (const o of orphans) {
+      headers.push({
+        ...o,
+        replies: o.replies ?? [],
+        threadMessageCount: 1,
+        threadOurReplyCount: 0,
+        threadInboundReplyCount: 0,
+        threadLatestActivity: (o.sentAt ?? o.createdAt).toISOString(),
+      });
+    }
+
+    headers.sort(
+      (a, b) =>
+        new Date(b.threadLatestActivity).getTime() -
+        new Date(a.threadLatestActivity).getTime(),
+    );
+
+    return headers.slice(0, take);
   }
 
+  /**
+   * Full thread for the drawer. Merges all outbound logs + inbound replies
+   * for the thread, sorted chronologically, each tagged with direction.
+   */
   async findOne(id: string) {
     const log = await this.prisma.emailLog.findUnique({
       where: { id },
-      include: {
-        replies: { orderBy: { receivedAt: 'asc' } },
-      },
+      include: { replies: { orderBy: { receivedAt: 'asc' } } },
     });
     if (!log) throw new NotFoundException('Email not found');
-    return log;
+
+    if (!log.threadId) {
+      // Standalone (no Gmail threadId — usually a failed send)
+      return {
+        ...log,
+        messages: [logToOutbound(log)],
+      };
+    }
+
+    const threadLogs = await this.prisma.emailLog.findMany({
+      where: { leadId: log.leadId, threadId: log.threadId },
+      include: { replies: { orderBy: { receivedAt: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const messages: ThreadMessage[] = [];
+    for (const l of threadLogs) {
+      messages.push(logToOutbound(l));
+      for (const r of l.replies) {
+        messages.push({
+          id: r.id,
+          type: 'reply',
+          direction: 'inbound',
+          timestamp: r.receivedAt.toISOString(),
+          fromEmail: r.fromEmail,
+          fromName: r.fromName,
+          toEmail: r.toEmail,
+          cc: [],
+          subject: r.subject,
+          bodyText: r.bodyText,
+          bodyHtml: r.bodyHtml,
+          snippet: r.snippet,
+          attachments: [],
+        });
+      }
+    }
+    messages.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+
+    const root = threadLogs[0] ?? log;
+
+    return {
+      ...root,
+      replies: threadLogs.flatMap((l) => l.replies),
+      messages,
+    };
   }
 
   /**
@@ -304,6 +417,47 @@ export class EmailService {
 // ─────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────
+
+/** A single message in a thread — outbound (us) or inbound (them). */
+export interface ThreadMessage {
+  id: string;
+  type: 'log' | 'reply';
+  direction: 'outbound' | 'inbound';
+  timestamp: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string | null;
+  cc: string[];
+  subject: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  snippet?: string | null;
+  attachments: any[];
+  // outbound-only
+  status?: string;
+  openedAt?: string | null;
+  error?: string | null;
+}
+
+function logToOutbound(log: any): ThreadMessage {
+  return {
+    id: log.id,
+    type: 'log',
+    direction: 'outbound',
+    timestamp: (log.sentAt ?? log.createdAt).toISOString(),
+    fromEmail: log.fromEmail,
+    fromName: log.fromName,
+    toEmail: log.toEmail,
+    cc: log.cc ?? [],
+    subject: log.subject,
+    bodyText: log.bodyText,
+    bodyHtml: log.bodyHtml,
+    attachments: (log.attachments as any[]) ?? [],
+    status: log.status,
+    openedAt: log.openedAt ? log.openedAt.toISOString() : null,
+    error: log.error,
+  };
+}
 
 /** Convert plain text → minimal HTML so we can inject the tracking pixel. */
 function plainToHtml(text: string): string {
