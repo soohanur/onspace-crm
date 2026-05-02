@@ -1,7 +1,54 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@onspace/db';
+import {
+  Confidence,
+  ContactSource,
+  ContactStatus,
+  ContactType,
+  LeadStage,
+  Prisma,
+} from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateContactDto, UpdateContactDto } from './dto';
+
+/**
+ * Phase 13 — global contacts directory filter shape. Mirrors the URL
+ * params parsed in the controller. `lead*` fields select on the parent
+ * Lead via Prisma's nested relation filter.
+ */
+export interface GlobalContactsFilter {
+  q?: string;
+  contactType?: ContactType[];
+  status?: ContactStatus[];
+  confidence?: Confidence[];
+  source?: ContactSource[];
+  isPrimary?: boolean;
+
+  hasEmail?: boolean;
+  hasPhone?: boolean;
+  hasLinkedin?: boolean;
+
+  leadCategory?: string;
+  leadCity?: string;
+  leadState?: string;
+  leadStage?: LeadStage[];
+
+  take?: number;
+  cursor?: string;
+}
+
+const CONTACT_LEAD_INCLUDE = {
+  lead: {
+    select: {
+      id: true,
+      businessName: true,
+      city: true,
+      state: true,
+      stage: true,
+      score: true,
+      category: true,
+    },
+  },
+} as const;
 
 @Injectable()
 export class ContactsService {
@@ -85,6 +132,138 @@ export class ContactsService {
         data: { isPrimary: true },
       });
     });
+  }
+
+  // ─── Phase 13: global directory ────────────────────────────────────────
+
+  private buildGlobalWhere(f: GlobalContactsFilter): Prisma.ContactWhereInput {
+    const where: Prisma.ContactWhereInput = {};
+    const AND: Prisma.ContactWhereInput[] = [];
+
+    if (f.contactType?.length) where.contactType = { in: f.contactType };
+    if (f.status?.length) where.status = { in: f.status };
+    if (f.confidence?.length) where.confidence = { in: f.confidence };
+    if (f.source?.length) where.source = { in: f.source };
+    if (f.isPrimary !== undefined) where.isPrimary = f.isPrimary;
+
+    if (f.hasEmail !== undefined)
+      where.email = f.hasEmail ? { not: null } : null;
+    if (f.hasPhone !== undefined)
+      where.phone = f.hasPhone ? { not: null } : null;
+    if (f.hasLinkedin !== undefined)
+      where.linkedin = f.hasLinkedin ? { not: null } : null;
+
+    // Lead-side filters via Prisma's nested relation filter — generates
+    // the appropriate JOIN automatically.
+    const leadIs: Prisma.LeadWhereInput = {};
+    if (f.leadCity) leadIs.city = f.leadCity;
+    if (f.leadState) leadIs.state = f.leadState;
+    if (f.leadStage?.length) leadIs.stage = { in: f.leadStage };
+    if (f.leadCategory) {
+      leadIs.OR = [
+        { category: f.leadCategory },
+        { categories: { has: f.leadCategory } },
+      ];
+    }
+    if (Object.keys(leadIs).length > 0) {
+      where.lead = { is: leadIs };
+    }
+
+    if (f.q) {
+      const q = f.q;
+      AND.push({
+        OR: [
+          { name:  { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q, mode: 'insensitive' } },
+          { lead:  { is: { businessName: { contains: q, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+
+    if (AND.length) where.AND = AND;
+    return where;
+  }
+
+  /**
+   * Cross-lead contact directory listing. Cursor-paginated. Includes a
+   * lean lead summary so the UI can render the business pill + stage
+   * badge without a second fetch.
+   */
+  async listGlobal(filter: GlobalContactsFilter) {
+    const where = this.buildGlobalWhere(filter);
+    const take = Math.min(Math.max(filter.take ?? 50, 1), 200);
+
+    const items = await this.prisma.contact.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take: take + 1,
+      ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+      include: CONTACT_LEAD_INCLUDE,
+    });
+
+    const hasMore = items.length > take;
+    const trimmed = hasMore ? items.slice(0, take) : items;
+    return {
+      items: trimmed,
+      nextCursor: hasMore ? trimmed[trimmed.length - 1]?.id ?? null : null,
+    };
+  }
+
+  async stats(filter: GlobalContactsFilter) {
+    const where = this.buildGlobalWhere(filter);
+    const [total, owners, verified, withEmail, withPhone] = await Promise.all([
+      this.prisma.contact.count({ where }),
+      this.prisma.contact.count({ where: { ...where, contactType: 'owner' } }),
+      this.prisma.contact.count({ where: { ...where, status: 'verified' } }),
+      this.prisma.contact.count({ where: { ...where, email: { not: null } } }),
+      this.prisma.contact.count({ where: { ...where, phone: { not: null } } }),
+    ]);
+    return { total, owners, verified, withEmail, withPhone };
+  }
+
+  /**
+   * Distinct lead-side values for the contacts filter dropdowns. Mirrors
+   * LeadsService.facets but joined through the contact table so the
+   * lists only include lead categories/cities/states that actually have
+   * a contact attached. Caps each list to 200.
+   */
+  async globalFacets() {
+    const [categoryRows, cityRows, stateRows] = await Promise.all([
+      this.prisma.$queryRaw<{ value: string }[]>`
+        SELECT DISTINCT unnest(l.categories) AS value
+        FROM contacts c
+        JOIN leads l ON l.id = c.lead_id
+        WHERE l.categories IS NOT NULL AND array_length(l.categories, 1) > 0
+        ORDER BY value
+        LIMIT 200
+      `,
+      this.prisma.contact.findMany({
+        where: { lead: { is: { city: { not: null } } } },
+        distinct: ['leadId'],
+        select: { lead: { select: { city: true } } },
+        take: 5_000,
+      }),
+      this.prisma.contact.findMany({
+        where: { lead: { is: { state: { not: null } } } },
+        distinct: ['leadId'],
+        select: { lead: { select: { state: true } } },
+        take: 5_000,
+      }),
+    ]);
+
+    const dedupSorted = (vals: (string | null | undefined)[], cap: number) =>
+      Array.from(
+        new Set(vals.filter((v): v is string => typeof v === 'string' && v.length > 0)),
+      )
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, cap);
+
+    return {
+      leadCategories: categoryRows.map((r) => r.value).filter(Boolean).slice(0, 200),
+      leadCities: dedupSorted(cityRows.map((r) => r.lead?.city), 200),
+      leadStates: dedupSorted(stateRows.map((r) => r.lead?.state), 100),
+    };
   }
 
   private toCreateData(

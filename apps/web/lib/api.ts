@@ -578,6 +578,55 @@ export interface CallsCounts {
   total: number;
 }
 
+// ─── Phase 13: Global Contacts Directory ─────────────────────────────────
+
+export interface ContactWithLead extends Contact {
+  lead: {
+    id: string;
+    businessName: string;
+    city: string | null;
+    state: string | null;
+    stage: LeadStage;
+    score: number;
+    category: string | null;
+  };
+}
+
+export interface GlobalContactsFilter {
+  q?: string;
+  contactType?: ContactType[];
+  status?: ContactStatus[];
+  confidence?: Confidence[];
+  source?: ContactSource[];
+  isPrimary?: 'true' | 'false';
+
+  hasEmail?: 'true' | 'false';
+  hasPhone?: 'true' | 'false';
+  hasLinkedin?: 'true' | 'false';
+
+  leadCategory?: string;
+  leadCity?: string;
+  leadState?: string;
+  leadStage?: LeadStage[];
+
+  cursor?: string;
+  take?: number;
+}
+
+export interface ContactsFacets {
+  leadCategories: string[];
+  leadCities: string[];
+  leadStates: string[];
+}
+
+export interface ContactsStats {
+  total: number;
+  owners: number;
+  verified: number;
+  withEmail: number;
+  withPhone: number;
+}
+
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
 
 export interface EmailTemplate {
@@ -1117,4 +1166,31 @@ export const api = {
     request<{ ok: true }>(`/calls/${id}`, { method: 'DELETE' }),
   listLeadCalls: (leadId: string) =>
     request<Call[]>(`/leads/${leadId}/calls`),
+
+  // ─── Phase 13: Global Contacts Directory ──────────────────────────────
+  listGlobalContacts: (params: GlobalContactsFilter = {}) => {
+    const qs = buildContactsQuery(params);
+    return request<{ items: ContactWithLead[]; nextCursor: string | null }>(
+      `/contacts?${qs.toString()}`,
+    );
+  },
+  getContactsFacets: () => request<ContactsFacets>('/contacts/facets'),
+  getContactsStats: (params: GlobalContactsFilter = {}) => {
+    const qs = buildContactsQuery(params);
+    return request<ContactsStats>(`/contacts/stats?${qs.toString()}`);
+  },
 };
+
+function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === '' || v === null) continue;
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      qs.set(k, v.join(','));
+      continue;
+    }
+    qs.set(k, String(v));
+  }
+  return qs;
+}
