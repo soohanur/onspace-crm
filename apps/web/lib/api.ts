@@ -340,7 +340,7 @@ export const api = {
       trackingPixelUrl: string;
       trackingReachable: boolean;
       tunnel: {
-        provider: 'env' | 'ngrok' | 'none';
+        provider: 'env' | 'ngrok' | 'cloudflared' | 'none';
         status: 'inactive' | 'starting' | 'active' | 'error';
         url: string | null;
         isReachable: boolean;

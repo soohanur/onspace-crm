@@ -204,6 +204,12 @@ function TunnelStatusCard({
 }) {
   const t = config.tunnel;
   if (t.status === 'active' && t.isReachable) {
+    const providerLabel = {
+      env: 'PUBLIC_API_URL',
+      ngrok: 'auto ngrok tunnel',
+      cloudflared: 'auto cloudflared quick tunnel',
+      none: 'none',
+    }[t.provider];
     return (
       <Card className="border-success/40 bg-successBg">
         <div className="flex items-start gap-3">
@@ -215,9 +221,8 @@ function TunnelStatusCard({
             <div className="text-bodysm text-ink-muted">
               Outbound emails embed a tracking pixel pointing at{' '}
               <span className="font-mono text-ink">{t.url}</span>{' '}
-              ({t.provider === 'env' ? 'PUBLIC_API_URL' : 'auto ngrok tunnel'}).
-              Recipients hitting the pixel from any inbox will flip your bubble's
-              ticks to green within ~2 s.
+              ({providerLabel}). Recipients hitting the pixel from any inbox
+              flip your bubble's ticks to green within ~2 s.
             </div>
             {t.startedAt && (
               <div className="text-caption text-neutral mt-1 font-mono font-tabular">
@@ -279,47 +284,28 @@ function TunnelStatusCard({
           <p className="text-bodysm text-ink-muted mb-3">
             The tracking pixel currently points at{' '}
             <span className="font-mono text-ink">{config.publicApiUrl}</span>{' '}
-            which recipients can't reach. Until you fix this, opens are only
-            inferred from replies (✓✓ turns green when the client replies). For
-            real-time open detection, take 2 minutes to set up an ngrok tunnel:
+            which recipients can't reach. Opens are only inferred from replies
+            until you set up a public URL. Easiest path is{' '}
+            <span className="font-medium text-ink">cloudflared</span> — no signup
+            required:
           </p>
-          <ol className="text-bodysm text-ink-muted list-decimal pl-5 space-y-1.5 mb-3">
-            <li>
-              Sign up at{' '}
-              <a
-                href="https://dashboard.ngrok.com/signup"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1"
-              >
-                dashboard.ngrok.com <ExternalLink size={11} />
-              </a>{' '}
-              (free).
-            </li>
-            <li>
-              Copy your authtoken from{' '}
-              <a
-                href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1"
-              >
-                Your Authtoken <ExternalLink size={11} />
-              </a>
-              .
-            </li>
-            <li>
-              Add to <span className="font-mono">.env</span>:
-              <pre className="font-mono text-caption bg-surface border border-border rounded-md p-2 mt-1">
-                NGROK_AUTHTOKEN=&quot;your_token_here&quot;
-              </pre>
-            </li>
-            <li>Restart the API. The tunnel auto-starts and this card flips green.</li>
-          </ol>
+          <pre className="text-caption font-mono bg-surface border border-border rounded-md p-2 mb-3 overflow-x-auto">
+{`# Linux / macOS:  install cloudflared via your package manager
+sudo apt install cloudflared      # Debian/Ubuntu
+brew install cloudflared          # macOS
+
+# Then restart the API. It auto-starts a tunnel
+# at https://*.trycloudflare.com — no signup needed.`}
+          </pre>
+          <p className="text-bodysm text-ink-muted mb-2">
+            Or use ngrok (1-time signup) by setting{' '}
+            <span className="font-mono">NGROK_AUTHTOKEN</span> in{' '}
+            <span className="font-mono">.env</span>.
+          </p>
           <div className="text-caption text-neutral">
             Already on a real domain in production? Set{' '}
-            <span className="font-mono">PUBLIC_API_URL</span> instead — it
-            takes precedence and skips ngrok entirely.
+            <span className="font-mono">PUBLIC_API_URL</span> — it takes
+            precedence and skips both auto-tunnels.
           </div>
         </div>
       </div>
