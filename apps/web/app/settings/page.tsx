@@ -135,55 +135,8 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Tracking pixel reachability */}
-      {config && !config.trackingReachable && (
-        <Card className="border-warning/40 bg-[#FEF4E5]">
-          <div className="flex items-start gap-3">
-            <AlertCircle size={16} className="text-warning shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <div className="font-medium text-ink mb-1">
-                Open tracking won't work yet
-              </div>
-              <p className="text-bodysm text-ink-muted mb-2">
-                We embed a 1×1 tracking pixel in outbound HTML emails. Right now
-                that pixel points to{' '}
-                <span className="font-mono text-ink">{config.publicApiUrl}</span>,
-                which the recipient's email client (and Gmail's image proxy)
-                can't reach. So <span className="font-medium text-ink">openedAt</span>{' '}
-                stays null forever.
-              </p>
-              <p className="text-bodysm text-ink-muted mb-2">
-                <span className="font-medium text-ink">Fix:</span> expose your API
-                via a public URL and set <span className="font-mono">PUBLIC_API_URL</span>{' '}
-                in <span className="font-mono">.env</span>, then restart. For local dev
-                the easiest tunnel is{' '}
-                <a
-                  href="https://ngrok.com/download"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  ngrok
-                </a>:
-              </p>
-              <pre className="text-caption font-mono bg-surface border border-border rounded-md p-2 mb-2 overflow-x-auto">
-{`# 1) Run a tunnel pointing at the API:
-ngrok http 4000
-
-# 2) Copy the https URL it gives you (e.g. https://abc123.ngrok.io)
-#    and add to .env:
-PUBLIC_API_URL="https://abc123.ngrok.io"
-
-# 3) Restart the API.`}
-              </pre>
-              <p className="text-caption text-neutral">
-                Until then, every other Phase 3 feature works fine — replies are
-                fetched server-side via Gmail API and don't need a public URL.
-              </p>
-            </div>
-          </div>
-        </Card>
-      )}
+      {/* Open-tracking tunnel */}
+      {config && <TunnelStatusCard config={config} />}
 
       {/* Accounts */}
       <Card>
@@ -241,6 +194,136 @@ PUBLIC_API_URL="https://abc123.ngrok.io"
         )}
       </Card>
     </div>
+  );
+}
+
+function TunnelStatusCard({
+  config,
+}: {
+  config: NonNullable<ReturnType<typeof useQuery<Awaited<ReturnType<typeof api.emailConfig>>>>['data']>;
+}) {
+  const t = config.tunnel;
+  if (t.status === 'active' && t.isReachable) {
+    return (
+      <Card className="border-success/40 bg-successBg">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 size={16} className="text-success shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-ink mb-0.5">
+              Open tracking is live
+            </div>
+            <div className="text-bodysm text-ink-muted">
+              Outbound emails embed a tracking pixel pointing at{' '}
+              <span className="font-mono text-ink">{t.url}</span>{' '}
+              ({t.provider === 'env' ? 'PUBLIC_API_URL' : 'auto ngrok tunnel'}).
+              Recipients hitting the pixel from any inbox will flip your bubble's
+              ticks to green within ~2 s.
+            </div>
+            {t.startedAt && (
+              <div className="text-caption text-neutral mt-1 font-mono font-tabular">
+                Up since {new Date(t.startedAt).toLocaleString()}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (t.status === 'starting') {
+    return (
+      <Card className="border-warning/40 bg-[#FEF4E5]">
+        <div className="flex items-start gap-3">
+          <AlertCircle size={16} className="text-warning shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium text-ink mb-0.5">
+              Tunnel is starting…
+            </div>
+            <div className="text-bodysm text-ink-muted">Refresh the page in a moment.</div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (t.status === 'error') {
+    return (
+      <Card className="border-error/40 bg-errorBg">
+        <div className="flex items-start gap-3">
+          <AlertCircle size={16} className="text-error shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-medium text-ink mb-0.5">
+              Tunnel failed to start
+            </div>
+            <div className="text-bodysm text-ink-muted mb-2">{t.error}</div>
+            <div className="text-caption text-neutral">
+              Open tracking falls back to reply-inference until the tunnel is
+              fixed. Check your <span className="font-mono">NGROK_AUTHTOKEN</span> in{' '}
+              <span className="font-mono">.env</span> and restart the API.
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // status === 'inactive'
+  return (
+    <Card className="border-warning/40 bg-[#FEF4E5]">
+      <div className="flex items-start gap-3">
+        <AlertCircle size={16} className="text-warning shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-ink mb-1">
+            Real-time open tracking is OFF
+          </div>
+          <p className="text-bodysm text-ink-muted mb-3">
+            The tracking pixel currently points at{' '}
+            <span className="font-mono text-ink">{config.publicApiUrl}</span>{' '}
+            which recipients can't reach. Until you fix this, opens are only
+            inferred from replies (✓✓ turns green when the client replies). For
+            real-time open detection, take 2 minutes to set up an ngrok tunnel:
+          </p>
+          <ol className="text-bodysm text-ink-muted list-decimal pl-5 space-y-1.5 mb-3">
+            <li>
+              Sign up at{' '}
+              <a
+                href="https://dashboard.ngrok.com/signup"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                dashboard.ngrok.com <ExternalLink size={11} />
+              </a>{' '}
+              (free).
+            </li>
+            <li>
+              Copy your authtoken from{' '}
+              <a
+                href="https://dashboard.ngrok.com/get-started/your-authtoken"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Your Authtoken <ExternalLink size={11} />
+              </a>
+              .
+            </li>
+            <li>
+              Add to <span className="font-mono">.env</span>:
+              <pre className="font-mono text-caption bg-surface border border-border rounded-md p-2 mt-1">
+                NGROK_AUTHTOKEN=&quot;your_token_here&quot;
+              </pre>
+            </li>
+            <li>Restart the API. The tunnel auto-starts and this card flips green.</li>
+          </ol>
+          <div className="text-caption text-neutral">
+            Already on a real domain in production? Set{' '}
+            <span className="font-mono">PUBLIC_API_URL</span> instead — it
+            takes precedence and skips ngrok entirely.
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -339,6 +339,15 @@ export const api = {
       publicApiUrl: string;
       trackingPixelUrl: string;
       trackingReachable: boolean;
+      tunnel: {
+        provider: 'env' | 'ngrok' | 'none';
+        status: 'inactive' | 'starting' | 'active' | 'error';
+        url: string | null;
+        isReachable: boolean;
+        startedAt: string | null;
+        error: string | null;
+        hasAuthtoken: boolean;
+      };
       successRedirect: string;
     }>('/email/config'),
 

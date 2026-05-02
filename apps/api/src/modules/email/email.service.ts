@@ -5,6 +5,7 @@ import { EmailAccountsService } from './email-accounts.service';
 import { GmailService, AttachmentInput } from './gmail.service';
 import { saveAttachment, StoredAttachment } from './attachments';
 import { accountHasReadScope } from './scopes';
+import { TunnelService } from './tunnel.service';
 
 const toJson = (v: unknown): Prisma.InputJsonValue =>
   (v ?? []) as Prisma.InputJsonValue;
@@ -31,6 +32,7 @@ export class EmailService {
     private readonly prisma: PrismaService,
     private readonly accounts: EmailAccountsService,
     private readonly gmail: GmailService,
+    private readonly tunnel: TunnelService,
   ) {}
 
   async send(input: SendInput) {
@@ -95,8 +97,9 @@ export class EmailService {
       });
     }
 
-    // 3. Inject open-tracking pixel into HTML body.
-    const finalBodyHtml = wrapWithTrackingPixel(
+    // 3. Inject open-tracking pixel into HTML body. Uses the dynamic
+    //    tunnel URL when available, falls back to localhost otherwise.
+    const finalBodyHtml = this.wrapWithTrackingPixel(
       input.bodyHtml ?? plainToHtml(input.body),
       log.trackingId,
     );
@@ -434,6 +437,13 @@ export class EmailService {
     }
     return { scanned: recent.length, newReplies: totalNew };
   }
+
+  /** Embed the 1×1 tracking pixel into HTML body using the live tunnel URL. */
+  private wrapWithTrackingPixel(html: string, trackingId: string): string {
+    const base = this.tunnel.publicUrl();
+    const px = `<img src="${base}/api/email/track/${trackingId}.gif" alt="" width="1" height="1" style="display:block;border:0;outline:none;width:1px;height:1px" />`;
+    return `${html}\n${px}`;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -490,10 +500,3 @@ function plainToHtml(text: string): string {
   return `<div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#050F1A;white-space:pre-wrap">${escaped}</div>`;
 }
 
-function wrapWithTrackingPixel(html: string, trackingId: string): string {
-  const base =
-    process.env.PUBLIC_API_URL ||
-    `http://localhost:${process.env.API_PORT || 4000}`;
-  const px = `<img src="${base}/api/email/track/${trackingId}.gif" alt="" width="1" height="1" style="display:block;border:0;outline:none;width:1px;height:1px" />`;
-  return `${html}\n${px}`;
-}

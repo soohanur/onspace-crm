@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { EmailAccountsService } from './email-accounts.service';
+import { TunnelService } from './tunnel.service';
 
 /** Mask middle of an OAuth client id so we can display it without leaking it. */
 function mask(s: string): string {
@@ -17,7 +18,10 @@ function mask(s: string): string {
 
 @Controller('email')
 export class EmailAccountsController {
-  constructor(private readonly accounts: EmailAccountsService) {}
+  constructor(
+    private readonly accounts: EmailAccountsService,
+    private readonly tunnel: TunnelService,
+  ) {}
 
   /**
    * Read-only check the UI uses to verify the Google OAuth env is set
@@ -31,15 +35,10 @@ export class EmailAccountsController {
     const hasSecret = !!process.env.GOOGLE_CLIENT_SECRET;
     const hasEncKey = !!process.env.EMAIL_TOKEN_ENC_KEY;
 
-    // Pixel tracking only works when the URL we embed in outbound emails
-    // is reachable from the recipient's email client / Gmail's image proxy.
-    // Localhost obviously isn't.
-    const publicApiUrl =
-      process.env.PUBLIC_API_URL ||
-      `http://localhost:${process.env.API_PORT || 4000}`;
+    // Tracking pixel uses whichever public URL the TunnelService picked.
+    const tunnel = this.tunnel.status();
+    const publicApiUrl = tunnel.url ?? `http://localhost:${process.env.API_PORT || 4000}`;
     const trackingPixelUrl = `${publicApiUrl}/api/email/track/{id}.gif`;
-    const trackingReachable =
-      !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(publicApiUrl);
 
     return {
       configured: !!(clientId && hasSecret && redirectUri && hasEncKey),
@@ -49,7 +48,8 @@ export class EmailAccountsController {
       hasEncKey,
       publicApiUrl,
       trackingPixelUrl,
-      trackingReachable,
+      trackingReachable: tunnel.isReachable,
+      tunnel,
       successRedirect:
         process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? 'http://localhost:3000/settings',
     };
