@@ -223,10 +223,13 @@ model EmailLog {
   bodyHtml  String?     @db.Text @map("body_html")
   bodyText  String?     @db.Text @map("body_text")
 
-  status    EmailStatus @default(queued)
-  provider  String      @default("gmail")
-  messageId String?     @map("message_id")    // Gmail message id (Message-ID header)
-  threadId  String?     @map("thread_id")     // Gmail threadId — for reply detection
+  status      EmailStatus @default(queued)
+  provider    String      @default("gmail")
+  messageId   String?     @map("message_id")    // Gmail message id (Message-ID header)
+  threadId    String?     @map("thread_id")     // Gmail threadId — for reply detection
+
+  // [{filename, mimeType, size, storagePath}, ...]
+  attachments Json        @default("[]")
 
   // Tracking key embedded in pixel + click links. Unique so we can look up by it.
   trackingId String     @unique @default(uuid()) @map("tracking_id")
@@ -244,9 +247,38 @@ model EmailLog {
 
   lead    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  replies EmailReply[]
 
   @@index([leadId, createdAt])
   @@index([status])
   @@index([threadId])
   @@map("email_logs")
+}
+
+/// Inbound replies fetched from Gmail by polling the thread of a sent email.
+/// The first time we see a new message in a thread we own, we insert a row
+/// here and bump email_logs.repliedAt.
+model EmailReply {
+  id              String   @id @default(uuid())
+  emailLogId      String   @map("email_log_id")
+  leadId          String   @map("lead_id")
+
+  gmailMessageId  String   @unique @map("gmail_message_id")
+  threadId        String   @map("thread_id")
+  fromEmail       String   @map("from_email")
+  fromName        String?  @map("from_name")
+  toEmail         String?  @map("to_email")
+  subject         String?
+  snippet         String?  @db.Text             // short preview from Gmail
+  bodyText        String?  @db.Text @map("body_text")
+  bodyHtml        String?  @db.Text @map("body_html")
+
+  receivedAt      DateTime @map("received_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  emailLog EmailLog @relation(fields: [emailLogId], references: [id], onDelete: Cascade)
+
+  @@index([emailLogId])
+  @@index([leadId])
+  @@map("email_replies")
 }

@@ -12,12 +12,14 @@ import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
 import { LeadActivityPanel } from '@/components/leads/LeadActivityPanel';
 import { LeadEmailHistory } from '@/components/leads/LeadEmailHistory';
 import { SendEmailDialog } from '@/components/leads/SendEmailDialog';
+import { EmailDetailDrawer } from '@/components/leads/EmailDetailDrawer';
 import { Button } from '@/components/ui/Button';
 import { Mail } from 'lucide-react';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [openedEmailId, setOpenedEmailId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['lead', id],
@@ -43,7 +45,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     <div className="max-w-[1200px] mx-auto px-6 py-8 space-y-6">
       <LeadDetailHeader lead={data} />
 
-      {/* Primary action bar */}
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => setEmailOpen(true)}>
           <Mail size={14} /> Send email
@@ -53,7 +54,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <LeadOverviewCard lead={data} />
-          <LeadEmailHistory leadId={id} />
+          <LeadEmailHistory leadId={id} onOpen={setOpenedEmailId} />
           <LeadNotesPanel leadId={id} />
           <LeadActivityPanel />
         </div>
@@ -68,6 +69,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         lead={data}
         open={emailOpen}
         onClose={() => setEmailOpen(false)}
+      />
+
+      <EmailDetailDrawer
+        lead={data}
+        emailId={openedEmailId}
+        onClose={() => setOpenedEmailId(null)}
       />
     </div>
   );

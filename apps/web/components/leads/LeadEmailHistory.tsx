@@ -5,9 +5,24 @@ import { api, EmailLog } from '@/lib/api';
 import { Card } from '../ui/Card';
 import { Chip } from '../ui/Chip';
 import { SectionHeader } from './LeadOverviewCard';
-import { Mail, CheckCircle2, XCircle, Eye, Reply, Clock } from 'lucide-react';
+import {
+  Mail,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Reply,
+  Clock,
+  Paperclip,
+  ChevronRight,
+} from 'lucide-react';
 
-export function LeadEmailHistory({ leadId }: { leadId: string }) {
+export function LeadEmailHistory({
+  leadId,
+  onOpen,
+}: {
+  leadId: string;
+  onOpen?: (id: string) => void;
+}) {
   const { data: emails = [] } = useQuery({
     queryKey: ['email-history', leadId],
     queryFn: () => api.listEmailHistory(leadId),
@@ -28,7 +43,7 @@ export function LeadEmailHistory({ leadId }: { leadId: string }) {
       ) : (
         <div className="space-y-2.5">
           {emails.map((e) => (
-            <EmailRow key={e.id} email={e} />
+            <EmailRow key={e.id} email={e} onClick={() => onOpen?.(e.id)} />
           ))}
         </div>
       )}
@@ -36,16 +51,36 @@ export function LeadEmailHistory({ leadId }: { leadId: string }) {
   );
 }
 
-function EmailRow({ email }: { email: EmailLog }) {
+function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void }) {
   const ts = email.sentAt ?? email.createdAt;
+  const replyCount = email.replies?.length ?? 0;
   return (
-    <div className="rounded-md border border-border bg-background px-4 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-md border border-border bg-background hover:border-primary hover:bg-surface px-4 py-3 transition-colors group"
+    >
       <div className="flex items-start gap-3">
         <StatusIcon status={email.status} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="font-medium text-ink truncate">{email.subject}</div>
             <StatusChip status={email.status} />
+            {email.openedAt && (
+              <Chip tone="positive" className="!h-5 !text-[11px]">
+                <Eye size={10} className="mr-1" /> opened
+              </Chip>
+            )}
+            {replyCount > 0 && (
+              <Chip tone="primary" className="!h-5 !text-[11px]">
+                <Reply size={10} className="mr-1" /> {replyCount}
+              </Chip>
+            )}
+            {email.attachments.length > 0 && (
+              <Chip tone="neutral" className="!h-5 !text-[11px]">
+                <Paperclip size={10} className="mr-1" /> {email.attachments.length}
+              </Chip>
+            )}
           </div>
           <div className="text-caption text-ink-muted mt-0.5">
             <span className="text-neutral">to</span> {email.toEmail}
@@ -55,22 +90,10 @@ function EmailRow({ email }: { email: EmailLog }) {
               </>
             )}
           </div>
-          <div className="text-caption text-neutral font-mono font-tabular mt-0.5 flex items-center gap-3 flex-wrap">
-            <span>
-              <Clock size={10} className="inline mr-1" />
-              {new Date(ts).toLocaleString()}
-            </span>
-            <span>from {email.fromEmail}</span>
-            <FuturePlaceholder
-              icon={<Eye size={10} />}
-              label="opened"
-              value={email.openedAt}
-            />
-            <FuturePlaceholder
-              icon={<Reply size={10} />}
-              label="replied"
-              value={email.repliedAt}
-            />
+          <div className="text-caption text-neutral font-mono font-tabular mt-0.5 inline-flex items-center gap-1">
+            <Clock size={10} />
+            {new Date(ts).toLocaleString()}
+            <span> · from {email.fromEmail}</span>
           </div>
           {email.status === 'failed' && email.error && (
             <div className="mt-1 text-caption text-error truncate" title={email.error}>
@@ -78,8 +101,12 @@ function EmailRow({ email }: { email: EmailLog }) {
             </div>
           )}
         </div>
+        <ChevronRight
+          size={16}
+          className="text-neutral group-hover:text-primary mt-1 shrink-0"
+        />
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -94,31 +121,4 @@ function StatusChip({ status }: { status: EmailLog['status'] }) {
   if (status === 'failed') return <Chip tone="negative">failed</Chip>;
   if (status === 'sending') return <Chip tone="primary">sending</Chip>;
   return <Chip tone="neutral">queued</Chip>;
-}
-
-/**
- * Phase 4 hook — pixel + IMAP listener will populate openedAt / repliedAt.
- * For now we render a dim placeholder so users know tracking is coming.
- */
-function FuturePlaceholder({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | null;
-}) {
-  if (value) {
-    return (
-      <span className="text-success">
-        {icon} {label} {new Date(value).toLocaleString()}
-      </span>
-    );
-  }
-  return (
-    <span className="text-neutral/60" title={`Tracking for "${label}" arrives in Phase 4`}>
-      {icon} {label} —
-    </span>
-  );
 }

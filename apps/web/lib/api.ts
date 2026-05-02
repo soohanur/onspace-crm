@@ -138,6 +138,30 @@ export interface EmailAccount {
 
 export type EmailStatus = 'queued' | 'sending' | 'sent' | 'failed';
 
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath?: string;
+}
+
+export interface EmailReply {
+  id: string;
+  emailLogId: string;
+  leadId: string;
+  gmailMessageId: string;
+  threadId: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string | null;
+  subject: string | null;
+  snippet: string | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+  receivedAt: string;
+  createdAt: string;
+}
+
 export interface EmailLog {
   id: string;
   leadId: string;
@@ -148,6 +172,8 @@ export interface EmailLog {
   cc: string[];
   bcc: string[];
   subject: string;
+  bodyText?: string | null;
+  bodyHtml?: string | null;
   status: EmailStatus;
   provider: string;
   messageId: string | null;
@@ -157,6 +183,8 @@ export interface EmailLog {
   repliedAt: string | null;
   sentAt: string | null;
   createdAt: string;
+  attachments: EmailAttachment[];
+  replies?: EmailReply[];
 }
 
 export interface SendEmailInput {
@@ -168,6 +196,9 @@ export interface SendEmailInput {
   subject: string;
   body: string;
   bodyHtml?: string;
+  files?: File[];
+  /** When set, this send is a reply continuing the parent email's thread. */
+  replyToLogId?: string;
 }
 
 export const api = {
@@ -284,12 +315,42 @@ export const api = {
   disconnectEmailAccount: (id: string) =>
     request<{ ok: true }>(`/email/accounts/${id}`, { method: 'DELETE' }),
 
-  sendEmail: (input: SendEmailInput) =>
-    request<EmailLog>('/email/send', {
+  sendEmail: async (input: SendEmailInput): Promise<EmailLog> => {
+    const fd = new FormData();
+    fd.append('leadId', input.leadId);
+    if (input.accountId) fd.append('accountId', input.accountId);
+    fd.append('toEmail', input.toEmail);
+    if (input.cc?.length) fd.append('cc', input.cc.join(','));
+    if (input.bcc?.length) fd.append('bcc', input.bcc.join(','));
+    fd.append('subject', input.subject);
+    fd.append('body', input.body);
+    if (input.bodyHtml) fd.append('bodyHtml', input.bodyHtml);
+    if (input.replyToLogId) fd.append('replyToLogId', input.replyToLogId);
+    for (const f of input.files ?? []) fd.append('files', f, f.name);
+
+    const res = await fetch(`${BASE}/api/email/send`, {
       method: 'POST',
-      body: JSON.stringify(input),
-    }),
+      body: fd,
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    }
+    return res.json() as Promise<EmailLog>;
+  },
 
   listEmailHistory: (leadId: string) =>
     request<EmailLog[]>(`/leads/${leadId}/emails`),
+
+  getEmail: (id: string) => request<EmailLog>(`/email/logs/${id}`),
+
+  refreshEmailReplies: (id: string) =>
+    request<{ fetched: number; newReplies: number }>(
+      `/email/logs/${id}/refresh-replies`,
+      { method: 'POST' },
+    ),
+
+  attachmentDownloadUrl: (logId: string, filename: string) =>
+    `${BASE}/api/email/logs/${logId}/attachments/${encodeURIComponent(filename)}`,
 };

@@ -4,10 +4,11 @@ import { EmailAccountsService } from './email-accounts.service';
 import { EmailController } from './email.controller';
 import { EmailService } from './email.service';
 import { GmailService } from './gmail.service';
+import { EmailReplyPoller } from './email-reply-poller.service';
 
 @Module({
   controllers: [EmailAccountsController, EmailController],
-  providers: [GmailService, EmailAccountsService, EmailService],
+  providers: [GmailService, EmailAccountsService, EmailService, EmailReplyPoller],
   exports: [EmailService],
 })
 export class EmailModule {}
