@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Lead } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
+import { ColumnKey } from '@/hooks/useColumnPrefs';
 import { Chip } from './ui/Chip';
 import {
   ExternalLink,
@@ -39,8 +41,23 @@ function useNewIds(items: Lead[]): Set<string> {
   return newIds;
 }
 
-export function LeadsTable({ leads }: { leads: Lead[] }) {
+export function LeadsTable({
+  leads,
+  visibleColumns,
+  selectable,
+  selectedIds,
+  onToggleSelect,
+  onToggleAll,
+}: {
+  leads: Lead[];
+  visibleColumns?: Set<ColumnKey>;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onToggleAll?: () => void;
+}) {
   const newIds = useNewIds(leads);
+  const isVisible = (k: ColumnKey) => !visibleColumns || visibleColumns.has(k);
 
   if (leads.length === 0) {
     return (
@@ -52,21 +69,32 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
 
   return (
     <div className="overflow-auto scroll-thin max-h-[72vh]">
-      <table className="min-w-[1700px] w-full text-bodysm">
+      <table className="min-w-[1500px] w-full text-bodysm">
         <thead className="bg-background sticky top-0 z-10">
           <tr className="text-caption uppercase tracking-[0.06em] text-neutral text-left">
-            <Th>Business</Th>
-            <Th>Categories</Th>
-            <Th>Phone</Th>
-            <Th>Email</Th>
-            <Th>Website</Th>
-            <Th>Address</Th>
-            <Th>Rating</Th>
-            <Th>Years</Th>
-            <Th>Social</Th>
-            <Th>Owner</Th>
-            <Th>YP Listing</Th>
-            <Th>Search</Th>
+            {selectable && (
+              <Th>
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={!!selectedIds && leads.length > 0 && leads.every((l) => selectedIds.has(l.id))}
+                  onChange={() => onToggleAll?.()}
+                  aria-label="Select all"
+                />
+              </Th>
+            )}
+            {isVisible('business') && <Th>Business</Th>}
+            {isVisible('categories') && <Th>Categories</Th>}
+            {isVisible('phone') && <Th>Phone</Th>}
+            {isVisible('email') && <Th>Email</Th>}
+            {isVisible('website') && <Th>Website</Th>}
+            {isVisible('address') && <Th>Address</Th>}
+            {isVisible('rating') && <Th>Rating</Th>}
+            {isVisible('years') && <Th>Years</Th>}
+            {isVisible('social') && <Th>Social</Th>}
+            {isVisible('owner') && <Th>Owner</Th>}
+            {isVisible('yp') && <Th>YP Listing</Th>}
+            {isVisible('search') && <Th>Search</Th>}
           </tr>
         </thead>
         <tbody>
@@ -78,7 +106,18 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 (newIds.has(l.id) ? 'animate-row-flash' : '')
               }
             >
-              <Td>
+              {selectable && (
+                <Td>
+                  <input
+                    type="checkbox"
+                    className="accent-primary"
+                    checked={!!selectedIds?.has(l.id)}
+                    onChange={() => onToggleSelect?.(l.id)}
+                    aria-label={`Select ${l.businessName}`}
+                  />
+                </Td>
+              )}
+              {isVisible('business') && <Td>
                 <div className="flex items-start gap-2">
                   {l.logoUrl ? (
                     <img
@@ -92,7 +131,10 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-medium text-ink truncate max-w-[260px] flex items-center gap-1">
+                    <Link
+                      href={`/leads/${l.id}`}
+                      className="font-medium text-ink hover:text-primary truncate max-w-[260px] flex items-center gap-1"
+                    >
                       {l.businessName}
                       {l.claimed && (
                         <CheckCircle2
@@ -101,7 +143,7 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                           aria-label="Claimed"
                         />
                       )}
-                    </div>
+                    </Link>
                     {l.description && (
                       <div className="text-caption text-neutral truncate max-w-[280px]">
                         {l.description}
@@ -109,8 +151,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                     )}
                   </div>
                 </div>
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('categories') && <Td>
                 {l.category ? (
                   <div className="space-y-1 max-w-[220px]">
                     <Chip tone="neutral">{l.category}</Chip>
@@ -123,8 +165,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('phone') && <Td>
                 {l.phone ? (
                   <div>
                     <span className="font-mono font-tabular flex items-center gap-1.5">
@@ -145,8 +187,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('email') && <Td>
                 {l.emails.length > 0 ? (
                   <div className="space-y-0.5">
                     {l.emails.slice(0, 3).map((em) => (
@@ -168,8 +210,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('website') && <Td>
                 {l.website ? (
                   <div className="space-y-0.5">
                     <a
@@ -197,8 +239,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Chip tone="neutral">No website</Chip>
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('address') && <Td>
                 {l.address ? (
                   <div className="text-bodysm">
                     <div className="flex items-start gap-1">
@@ -217,8 +259,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('rating') && <Td>
                 {l.rating !== null ? (
                   <div className="flex items-center gap-1 font-mono font-tabular">
                     <Star size={12} className="text-warning fill-warning" />
@@ -232,8 +274,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('years') && <Td>
                 <div className="space-y-0.5">
                   {l.yearEstablished && (
                     <div className="font-mono font-tabular">Est {l.yearEstablished}</div>
@@ -246,8 +288,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                   )}
                   {!l.yearEstablished && !l.yearsInBusiness && !l.yearsWithYP && <Dash />}
                 </div>
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('social') && <Td>
                 <div className="flex gap-1.5 flex-wrap max-w-[200px]">
                   {groupSocials(l.socials).map(({ key, urls }) => (
                     <span key={key} className="inline-flex items-center gap-0.5">
@@ -266,8 +308,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                   ))}
                   {l.socials.length === 0 && <Dash />}
                 </div>
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('owner') && <Td>
                 {l.ownerSearchUrl ? (
                   <a
                     href={l.ownerSearchUrl}
@@ -298,8 +340,8 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                     Profile
                   </a>
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('yp') && <Td>
                 {l.sourceUrl ? (
                   <a
                     href={l.sourceUrl}
@@ -315,14 +357,14 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
                 ) : (
                   <Dash />
                 )}
-              </Td>
-              <Td>
+              </Td>}
+              {isVisible('search') && <Td>
                 <div className="text-caption text-ink-muted">
                   {l.searchQuery}
                   <div className="text-neutral">{l.searchLocation}</div>
                   <div className="text-neutral mt-0.5">{relativeTime(l.createdAt)}</div>
                 </div>
-              </Td>
+              </Td>}
             </tr>
           ))}
         </tbody>

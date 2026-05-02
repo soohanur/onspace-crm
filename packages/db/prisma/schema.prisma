@@ -1,6 +1,6 @@
-// Phase 1 (MVP) — Lead scraping only.
-// Future phases will add: tenants, users, contacts (multiple per lead),
-// activities, tasks, groups, campaigns, workflows, custom_fields, etc.
+// Phase 1 — Lead scraping ✅
+// Phase 2 — CRM core: lead detail, groups (manual + smart), notes ✅
+// Future: contacts (multi per lead), activities, campaigns, workflows, tenants/users.
 
 generator client {
   provider      = "prisma-client-js"
@@ -18,6 +18,11 @@ enum ScrapeJobStatus {
   done
   failed
   cancelled
+}
+
+enum GroupType {
+  manual
+  smart
 }
 
 model ScrapeJob {
@@ -110,12 +115,59 @@ model Lead {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  job ScrapeJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  job              ScrapeJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  groupMemberships LeadGroupMember[]
+  notes            Note[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
   @@index([city, state])
   @@index([website])
   @@index([createdAt])
+  @@index([rating])
+  @@index([yearsInBusiness])
   @@map("leads")
+}
+
+model LeadGroup {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  type        GroupType
+  filterDsl   Json?     @map("filter_dsl")  // for smart groups: same shape as /leads query params
+  color       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt      @map("updated_at")
+
+  members LeadGroupMember[]
+
+  @@index([type])
+  @@index([createdAt])
+  @@map("lead_groups")
+}
+
+model LeadGroupMember {
+  groupId String   @map("group_id")
+  leadId  String   @map("lead_id")
+  addedAt DateTime @default(now()) @map("added_at")
+
+  group LeadGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lead  Lead      @relation(fields: [leadId],  references: [id], onDelete: Cascade)
+
+  @@id([groupId, leadId])
+  @@index([leadId])
+  @@map("lead_group_members")
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  body      String   @db.Text
+  authorId  String?  @map("author_id")           // hooks into users table later
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+  @@map("notes")
 }

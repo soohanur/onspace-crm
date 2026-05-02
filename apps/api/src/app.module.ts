@@ -7,6 +7,8 @@ import { HealthController } from './modules/health/health.controller';
 import { LeadsModule } from './modules/leads/leads.module';
 import { ScrapeModule } from './modules/scrape/scrape.module';
 import { SearchesModule } from './modules/searches/searches.module';
+import { GroupsModule } from './modules/groups/groups.module';
+import { NotesModule } from './modules/notes/notes.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { SearchesModule } from './modules/searches/searches.module';
     LeadsModule,
     SearchesModule,
     ScrapeModule,
+    GroupsModule,
+    NotesModule,
   ],
   controllers: [HealthController],
 })

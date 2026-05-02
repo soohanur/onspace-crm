@@ -88,6 +88,41 @@ export interface LeadStats {
   withWebsite: number;
   withEmail: number;
   withPhone: number;
+  withSocials?: number;
+}
+
+export interface Note {
+  id: string;
+  leadId: string;
+  body: string;
+  authorId: string | null;
+  createdAt: string;
+}
+
+export interface LeadGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  type: 'manual' | 'smart';
+  filterDsl: Record<string, unknown> | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+}
+
+export interface LeadFacets {
+  categories: string[];
+  cities: string[];
+  states: string[];
+}
+
+export interface CreateGroupInput {
+  name: string;
+  description?: string;
+  type: 'manual' | 'smart';
+  filterDsl?: Record<string, unknown>;
+  color?: string;
 }
 
 export const api = {
@@ -127,4 +162,55 @@ export const api = {
 
   suggestLocations: (q: string) =>
     request<string[]>(`/searches/locations?q=${encodeURIComponent(q)}`),
+
+  // ─── Phase 2 ───
+  getLead: (id: string) => request<Lead>(`/leads/${id}`),
+
+  facets: () => request<LeadFacets>('/leads/facets'),
+
+  // notes
+  listNotes: (leadId: string) => request<Note[]>(`/leads/${leadId}/notes`),
+  createNote: (leadId: string, body: string) =>
+    request<Note>(`/leads/${leadId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
+  deleteNote: (leadId: string, noteId: string) =>
+    request<{ ok: true }>(`/leads/${leadId}/notes/${noteId}`, {
+      method: 'DELETE',
+    }),
+
+  // groups
+  listGroups: () => request<LeadGroup[]>('/groups'),
+  getGroup: (id: string) => request<LeadGroup>(`/groups/${id}`),
+  createGroup: (input: CreateGroupInput) =>
+    request<LeadGroup>('/groups', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateGroup: (id: string, patch: Partial<CreateGroupInput>) =>
+    request<LeadGroup>(`/groups/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteGroup: (id: string) =>
+    request<{ ok: true }>(`/groups/${id}`, { method: 'DELETE' }),
+
+  listGroupLeads: (id: string, params: Record<string, string | number | undefined> = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '') qs.set(k, String(v));
+    }
+    return request<LeadsPage>(`/groups/${id}/leads?${qs.toString()}`);
+  },
+  addLeadsToGroup: (id: string, leadIds: string[]) =>
+    request<{ added: number }>(`/groups/${id}/leads`, {
+      method: 'POST',
+      body: JSON.stringify({ leadIds }),
+    }),
+  removeLeadsFromGroup: (id: string, leadIds: string[]) =>
+    request<{ removed: number }>(`/groups/${id}/leads`, {
+      method: 'DELETE',
+      body: JSON.stringify({ leadIds }),
+    }),
 };
