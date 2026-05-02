@@ -26,6 +26,13 @@ export interface SendInput {
   /** Phase 9: when set, this send is a campaign tick. Stamped on the
    *  EmailLog row, used by the chat drawer pill, and de-duplicated below. */
   campaignId?: string;
+  /** Phase 11: when set, this send originated from a Proposal. The
+   *  Proposal/EmailLog 1:1 link lives on Proposal.emailLogId — we
+   *  back-fill it on the proposal row from the controller after a
+   *  successful send. Carrying the id through SendInput keeps the call
+   *  shape symmetric with `campaignId` even though we don't currently
+   *  stamp it on the log row directly (the FK is on the proposal). */
+  proposalId?: string;
 }
 
 @Injectable()

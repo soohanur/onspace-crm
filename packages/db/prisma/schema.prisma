@@ -138,6 +138,14 @@ enum MeetingStatus {
   no_show
 }
 
+// ─── Phase 11: Proposals ──────────────────────────────────────────────────
+
+enum ProposalStatus {
+  draft
+  sent
+  failed
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -249,6 +257,7 @@ model Lead {
   contacts         Contact[]
   tasks            Task[]
   meetings         Meeting[]
+  proposals        Proposal[]
   campaignRecipients CampaignRecipient[]
 
   @@unique([source, dedupHash])
@@ -290,6 +299,7 @@ model Contact {
   lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   tasks Task[]
   meetings Meeting[]
+  proposals Proposal[]
   campaignRecipients CampaignRecipient[]
 
   @@index([leadId])
@@ -395,6 +405,7 @@ model EmailAccount {
   emailLogs EmailLog[]
   campaigns Campaign[]
   meetings  Meeting[]
+  proposals Proposal[]
 
   @@index([active])
   @@map("email_accounts")
@@ -449,6 +460,7 @@ model EmailLog {
   campaign Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   replies  EmailReply[]
   campaignRecipient CampaignRecipient?
+  proposal Proposal?         @relation("ProposalEmailLog")
 
   @@index([leadId, createdAt])
   @@index([status])
@@ -666,4 +678,42 @@ model Meeting {
   @@index([scheduledAt])
   @@index([externalEventId])
   @@map("meetings")
+}
+
+/// Phase 11 — proposals. One row per proposal email sent to a lead.
+/// On send, links to the EmailLog so the chat drawer thread surfaces the
+/// outbound message naturally; deleting the proposal does NOT delete the
+/// EmailLog (audit trail stays).
+model Proposal {
+  id            String         @id @default(uuid())
+  leadId        String         @map("lead_id")
+  contactId     String?        @map("contact_id")
+  accountId     String?        @map("account_id")
+  /// Email subject line.
+  subject       String
+  /// Email body (text). HTML is rendered server-side from the text at send
+  /// time using the same plainToHtml helper EmailService uses.
+  message       String         @db.Text
+  /// Recipient email at the moment of send (snapshotted — primary contact's
+  /// email or lead.email at that time).
+  toEmail       String         @map("to_email")
+  /// Files attached to the proposal email. Same JSON shape as
+  /// email_logs.attachments — [{filename,mimeType,size,storagePath}, ...]
+  attachments   Json           @default("[]")
+  status        ProposalStatus @default(draft)
+  /// Linked outbound EmailLog when status='sent'. Unique back-relation.
+  emailLogId    String?        @unique @map("email_log_id")
+  error         String?        @db.Text
+  sentAt        DateTime?      @map("sent_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt      @map("updated_at")
+
+  lead     Lead          @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  contact  Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  account  EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  emailLog EmailLog?     @relation("ProposalEmailLog", fields: [emailLogId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([status])
+  @@map("proposals")
 }

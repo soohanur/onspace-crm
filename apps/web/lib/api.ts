@@ -223,6 +223,8 @@ export interface Lead {
   tasks?: Task[];
   /** Upcoming scheduled meetings; only populated by findOne. */
   meetings?: Meeting[];
+  /** Recent proposals (latest 10); only populated by findOne. */
+  proposals?: Proposal[];
   createdAt: string;
 }
 
@@ -443,6 +445,64 @@ export interface MeetingConflictSummary {
   durationMin: number;
   leadId: string;
   leadBusinessName: string;
+}
+
+// ─── Phase 11: Proposals ─────────────────────────────────────────────────
+
+export type ProposalStatus = 'draft' | 'sent' | 'failed';
+
+export interface ProposalAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath?: string;
+}
+
+export interface Proposal {
+  id: string;
+  leadId: string;
+  contactId: string | null;
+  accountId: string | null;
+  subject: string;
+  message: string;
+  toEmail: string;
+  attachments: ProposalAttachment[];
+  status: ProposalStatus;
+  emailLogId: string | null;
+  error: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lead?: { id: string; businessName: string; stage: LeadStage };
+  contact?: {
+    id: string;
+    name: string;
+    email: string | null;
+    contactType: ContactType;
+  } | null;
+  account?: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  } | null;
+  emailLog?: {
+    id: string;
+    subject: string;
+    status?: string;
+    sentAt: string | null;
+    openedAt: string | null;
+    repliedAt: string | null;
+    threadId: string | null;
+  } | null;
+}
+
+export interface SendProposalInput {
+  leadId: string;
+  contactId?: string;
+  accountId?: string;
+  subject: string;
+  message: string;
+  files: File[];
 }
 
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
@@ -911,5 +971,36 @@ export const api = {
     return request<{ conflict: MeetingConflictSummary | null }>(
       `/meetings/conflict-check?${qs.toString()}`,
     );
+  },
+
+  // ─── Phase 11: Proposals ──────────────────────────────────────────────
+  listLeadProposals: (leadId: string) =>
+    request<Proposal[]>(`/leads/${leadId}/proposals`),
+  getProposal: (id: string) => request<Proposal>(`/proposals/${id}`),
+  deleteProposal: (id: string) =>
+    request<{ ok: true }>(`/proposals/${id}`, { method: 'DELETE' }),
+  /**
+   * Multipart `POST /api/proposals/send`. We bypass the JSON `request`
+   * helper because FormData needs the browser-set content-type header
+   * (boundary) and shouldn't be JSON-encoded.
+   */
+  sendProposal: async (input: SendProposalInput) => {
+    const fd = new FormData();
+    fd.append('leadId', input.leadId);
+    if (input.contactId) fd.append('contactId', input.contactId);
+    if (input.accountId) fd.append('accountId', input.accountId);
+    fd.append('subject', input.subject);
+    fd.append('message', input.message);
+    for (const f of input.files) fd.append('files', f);
+    const res = await fetch(`${BASE}/api/proposals/send`, {
+      method: 'POST',
+      body: fd,
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    }
+    return (await res.json()) as Proposal;
   },
 };

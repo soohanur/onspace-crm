@@ -209,6 +209,22 @@ export class LeadsService {
           },
           orderBy: { scheduledAt: 'asc' },
         },
+        proposals: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            emailLog: {
+              select: {
+                id: true,
+                subject: true,
+                sentAt: true,
+                openedAt: true,
+                repliedAt: true,
+                threadId: true,
+              },
+            },
+          },
+        },
       },
     });
     if (!lead) throw new NotFoundException('Lead not found');

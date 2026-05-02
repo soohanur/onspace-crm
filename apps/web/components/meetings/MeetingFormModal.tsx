@@ -43,6 +43,7 @@ export function MeetingFormModal({
   open,
   initial,
   lockedLeadId,
+  lockedAccountId,
   pending,
   error,
   onClose,
@@ -51,6 +52,12 @@ export function MeetingFormModal({
   open: boolean;
   initial?: Partial<Meeting>;
   lockedLeadId?: string;
+  /**
+   * When set, the Google Account picker is hidden and the account is
+   * pre-selected to this id. Used by the chat-drawer slash command so
+   * the meeting goes out via the same account currently composing.
+   */
+  lockedAccountId?: string | null;
   pending?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -77,7 +84,7 @@ export function MeetingFormModal({
     setForm({
       leadId: initial?.leadId ?? lockedLeadId ?? '',
       contactId: initial?.contactId ?? undefined,
-      accountId: initial?.accountId ?? undefined,
+      accountId: lockedAccountId ?? initial?.accountId ?? undefined,
       title: initial?.title ?? '',
       type: initial?.type ?? 'phone',
       meetingLink: initial?.meetingLink ?? '',
@@ -94,7 +101,7 @@ export function MeetingFormModal({
     });
     setAttendeeDraft('');
     setEmailDirty(false);
-  }, [open, initial, lockedLeadId]);
+  }, [open, initial, lockedLeadId, lockedAccountId]);
 
   const { data: contacts = [] } = useQuery({
     queryKey: ['contacts', form.leadId || 'none'],
@@ -378,34 +385,36 @@ export function MeetingFormModal({
             </Field>
           )}
 
-          {/* Google Account picker — drives which Calendar the event lands on. */}
-          <Field label="Google account (for Calendar invite)">
-            <select
-              value={form.accountId ?? ''}
-              onChange={(e) =>
-                setForm({ ...form, accountId: e.target.value || undefined })
-              }
-              className="h-10 px-2 w-full rounded-md border border-border bg-surface text-bodysm text-ink focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
-            >
-              <option value="">Auto-pick (server decides)</option>
-              {accounts.map((a) => (
-                <option
-                  key={a.id}
-                  value={a.id}
-                  disabled={!a.hasCalendarScope}
-                >
-                  {a.email}
-                  {!a.hasCalendarScope ? '  — missing Calendar scope' : ''}
-                </option>
-              ))}
-            </select>
-            {accounts.length > 0 && !accounts.some((a) => a.hasCalendarScope) && (
-              <div className="text-caption text-warning mt-1">
-                None of your connected accounts has the Calendar scope.
-                Disconnect + reconnect from Settings to grant it.
-              </div>
-            )}
-          </Field>
+          {/* Google Account picker — hidden when locked from caller (e.g. slash command). */}
+          {!lockedAccountId && (
+            <Field label="Google account (for Calendar invite)">
+              <select
+                value={form.accountId ?? ''}
+                onChange={(e) =>
+                  setForm({ ...form, accountId: e.target.value || undefined })
+                }
+                className="h-10 px-2 w-full rounded-md border border-border bg-surface text-bodysm text-ink focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
+              >
+                <option value="">Auto-pick (server decides)</option>
+                {accounts.map((a) => (
+                  <option
+                    key={a.id}
+                    value={a.id}
+                    disabled={!a.hasCalendarScope}
+                  >
+                    {a.email}
+                    {!a.hasCalendarScope ? '  — missing Calendar scope' : ''}
+                  </option>
+                ))}
+              </select>
+              {accounts.length > 0 && !accounts.some((a) => a.hasCalendarScope) && (
+                <div className="text-caption text-warning mt-1">
+                  None of your connected accounts has the Calendar scope.
+                  Disconnect + reconnect from Settings to grant it.
+                </div>
+              )}
+            </Field>
+          )}
 
           <Field label="Attendees">
             {(suggestedEmails.length > 0 || (form.attendeeEmails ?? []).length > 0) && (

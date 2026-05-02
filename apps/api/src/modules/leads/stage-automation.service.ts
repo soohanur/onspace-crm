@@ -11,6 +11,7 @@ type Trigger =
   | 'no_open_3d'
   | 'meeting_scheduled'
   | 'meeting_completed'
+  | 'proposal_sent'
   | 'manual';
 
 /**
@@ -219,6 +220,69 @@ export class StageAutomationService {
     } catch (err) {
       this.log.warn(
         `stage automation onMeetingCompleted failed for ${meetingId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Phase 11 — proposal sent. Two side-effects, both idempotent:
+   *  1. Forward-only stage promotion to `proposal_sent` (no-op if the
+   *     lead is already at proposal_sent / converted / not_converted /
+   *     lost — those are downstream of "we sent a proposal").
+   *  2. Idempotent `proposal_followup` task — created only if no open
+   *     task with that context already exists for this lead.
+   * Wrapped in a single try/catch — a failure here never bubbles to the
+   * caller (the proposal send itself already succeeded by this point).
+   */
+  async onProposalSent(leadId: string): Promise<void> {
+    try {
+      const lead = await this.prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { stage: true },
+      });
+      if (!lead) return;
+
+      const lockedFromAutomation = new Set<LeadStage>([
+        'proposal_sent',
+        'converted',
+        'not_converted',
+        'lost',
+      ]);
+      if (!lockedFromAutomation.has(lead.stage)) {
+        await this.applyStageChange(
+          leadId,
+          lead.stage,
+          'proposal_sent',
+          'proposal_sent',
+        );
+      }
+
+      const existing = await this.prisma.task.findFirst({
+        where: {
+          leadId,
+          context: 'proposal_followup',
+          status: { in: ['open', 'in_progress'] },
+        },
+        select: { id: true },
+      });
+      if (existing) return;
+
+      const tasks = this.moduleRef.get(TasksService, { strict: false });
+      const due = new Date();
+      due.setDate(due.getDate() + 3);
+      await tasks.create({
+        leadId,
+        title: 'Proposal follow-up',
+        description: 'Proposal sent — circle back if no reply.',
+        kind: 'followup',
+        context: 'proposal_followup',
+        priority: 'high',
+        dueAt: due.toISOString(),
+      });
+      this.log.log(`[proposal] auto-created proposal_followup task for lead=${leadId}`);
+    } catch (err) {
+      this.log.warn(
+        `stage automation onProposalSent failed for ${leadId}: ${err instanceof Error ? err.message : err}`,
       );
     }
   }
