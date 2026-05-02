@@ -6,8 +6,10 @@ import { EmailService } from './email.service';
 import { GmailService } from './gmail.service';
 import { EmailReplyPoller } from './email-reply-poller.service';
 import { TunnelService } from './tunnel.service';
+import { LeadsModule } from '../leads/leads.module';
 
 @Module({
+  imports: [LeadsModule],
   controllers: [EmailAccountsController, EmailController],
   providers: [
     GmailService,

@@ -88,6 +88,39 @@ enum FollowUpStatus {
   overdue
 }
 
+// ─── Phase 6: Tasks / Follow-ups ──────────────────────────────────────────
+
+enum TaskStatus {
+  open
+  in_progress
+  done
+  cancelled
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskKind {
+  general
+  followup
+}
+
+enum TaskContext {
+  none
+  approached_followup
+  engaged_followup
+  qualified_followup
+  meeting_followup
+  proposal_followup
+  no_response_followup
+  push_followup
+  interested_followup
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -192,6 +225,7 @@ model Lead {
   notes            Note[]
   emailLogs        EmailLog[]
   contacts         Contact[]
+  tasks            Task[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
@@ -229,11 +263,44 @@ model Contact {
   createdAt     DateTime      @default(now())      @map("created_at")
   updatedAt     DateTime      @updatedAt           @map("updated_at")
 
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tasks Task[]
 
   @@index([leadId])
   @@index([leadId, isPrimary])
   @@map("contacts")
+}
+
+/// One row per actionable task or follow-up. Phase 6 only supports manual
+/// creation; the rule engine that auto-creates follow-ups on email events
+/// arrives in a later phase.
+model Task {
+  id              String       @id @default(uuid())
+  leadId          String       @map("lead_id")
+  contactId       String?      @map("contact_id")
+  title           String
+  description     String?      @db.Text
+  status          TaskStatus   @default(open)
+  priority        TaskPriority @default(medium)
+  kind            TaskKind     @default(general)
+  context         TaskContext  @default(none)
+  dueAt           DateTime?    @map("due_at")
+  completedAt     DateTime?    @map("completed_at")
+  /// Stage the lead was in when this task was created — useful for context filters.
+  stageAtCreation LeadStage    @map("stage_at_creation")
+  /// Free-form attribution string until multi-tenant arrives. Phase 7 swaps this for a user FK.
+  assignedTo      String?      @map("assigned_to")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt      @map("updated_at")
+
+  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([status, dueAt])
+  @@index([dueAt])
+  @@index([kind, context])
+  @@map("tasks")
 }
 
 model LeadGroup {

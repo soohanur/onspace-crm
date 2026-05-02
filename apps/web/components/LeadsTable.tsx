@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { Lead } from '@/lib/api';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api, Lead } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
 import { ColumnKey } from '@/hooks/useColumnPrefs';
 import { Chip } from './ui/Chip';
@@ -64,6 +65,20 @@ export function LeadsTable({
   const newIds = useNewIds(leads);
   const isVisible = (k: ColumnKey) => !visibleColumns || visibleColumns.has(k);
 
+  // Bulk-fetch open task counts for the visible rows. One round-trip per
+  // page render (keyed by the joined ID list) instead of per-row N+1.
+  const taskColumnVisible = isVisible('tasks');
+  const idsKey = useMemo(
+    () => leads.map((l) => l.id).sort().join(','),
+    [leads],
+  );
+  const { data: taskCounts } = useQuery({
+    queryKey: ['lead-task-counts', idsKey],
+    queryFn: () => api.taskOpenCounts(leads.map((l) => l.id)),
+    enabled: taskColumnVisible && leads.length > 0,
+    refetchInterval: 30_000,
+  });
+
   if (leads.length === 0) {
     return (
       <div className="py-20 text-center text-ink-muted text-bodysm">
@@ -91,6 +106,7 @@ export function LeadsTable({
             {isVisible('business') && <Th>Business</Th>}
             {isVisible('stage') && <Th>Stage</Th>}
             {isVisible('score') && <Th className="text-right">Score</Th>}
+            {isVisible('tasks') && <Th>Tasks</Th>}
             {isVisible('categories') && <Th>Categories</Th>}
             {isVisible('phone') && <Th>Phone</Th>}
             {isVisible('email') && <Th>Email</Th>}
@@ -167,6 +183,9 @@ export function LeadsTable({
                 <div className="text-right font-mono font-tabular tabular-nums">
                   {l.score}
                 </div>
+              </Td>}
+              {isVisible('tasks') && <Td>
+                <TaskCountBadge count={taskCounts?.[l.id] ?? 0} />
               </Td>}
               {isVisible('categories') && <Td>
                 {l.category ? (
@@ -427,6 +446,18 @@ function Td({ children }: { children: React.ReactNode }) {
 
 function Dash() {
   return <span className="text-neutral">—</span>;
+}
+
+function TaskCountBadge({ count }: { count: number }) {
+  if (count === 0) return <Dash />;
+  return (
+    <span
+      className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-md bg-primary/10 text-primary text-[12px] font-medium"
+      title={`${count} open task${count === 1 ? '' : 's'}`}
+    >
+      {count}
+    </span>
+  );
 }
 
 function prettyHost(url: string) {

@@ -190,6 +190,13 @@ export class LeadsService {
         contacts: {
           orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
         },
+        tasks: {
+          where: { status: { in: ['open', 'in_progress'] } },
+          orderBy: [
+            { dueAt: { sort: 'asc', nulls: 'last' } },
+            { createdAt: 'desc' },
+          ],
+        },
       },
     });
     if (!lead) throw new NotFoundException('Lead not found');

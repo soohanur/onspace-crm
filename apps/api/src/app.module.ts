@@ -10,6 +10,7 @@ import { SearchesModule } from './modules/searches/searches.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { NotesModule } from './modules/notes/notes.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 import { EmailModule } from './modules/email/email.module';
 
 @Module({
@@ -31,6 +32,7 @@ import { EmailModule } from './modules/email/email.module';
     GroupsModule,
     NotesModule,
     ContactsModule,
+    TasksModule,
     EmailModule,
   ],
   controllers: [HealthController],

@@ -6,6 +6,7 @@ import { GmailService, AttachmentInput } from './gmail.service';
 import { saveAttachment, StoredAttachment } from './attachments';
 import { accountHasReadScope } from './scopes';
 import { TunnelService } from './tunnel.service';
+import { StageAutomationService } from '../leads/stage-automation.service';
 
 const toJson = (v: unknown): Prisma.InputJsonValue =>
   (v ?? []) as Prisma.InputJsonValue;
@@ -33,6 +34,7 @@ export class EmailService {
     private readonly accounts: EmailAccountsService,
     private readonly gmail: GmailService,
     private readonly tunnel: TunnelService,
+    private readonly stageAutomation: StageAutomationService,
   ) {}
 
   async send(input: SendInput) {
@@ -137,6 +139,9 @@ export class EmailService {
           sentAt: new Date(),
         },
       });
+      // Stage automation: new -> approached on first send. Wrapped in
+      // try/catch internally; never bubbles a failure to the caller.
+      await this.stageAutomation.onEmailSent(input.leadId);
       return updated;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -342,13 +347,16 @@ export class EmailService {
     // Only promote to "opened" if this hit isn't suspect AND we haven't
     // already recorded an open.
     if (!suspect && !log.openedAt) {
-      await this.prisma.emailLog.update({
+      const promoted = await this.prisma.emailLog.update({
         where: { id: log.id },
         data: { openedAt: now },
+        select: { leadId: true },
       });
       this.log.log(
         `email ${log.id} marked opened (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
       );
+      // Stage automation: only fires on the FIRST real open (null -> set).
+      await this.stageAutomation.onEmailOpened(promoted.leadId);
     } else {
       this.log.log(
         `email ${log.id} pixel hit suspected ${suspect ? 'PREFETCH' : 'OK'} (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
@@ -422,6 +430,12 @@ export class EmailService {
         },
       });
       added += 1;
+    }
+
+    // Stage automation: any net-new reply on this thread promotes the lead
+    // toward "interested" (forward-only — locked downstream stages stay).
+    if (added > 0) {
+      await this.stageAutomation.onEmailReplied(log.leadId);
     }
 
     if (added > 0 && !log.repliedAt) {

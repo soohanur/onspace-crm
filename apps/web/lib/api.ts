@@ -88,6 +88,83 @@ export interface CreateContactInput {
 
 export type UpdateContactInput = Partial<CreateContactInput>;
 
+// ─── Phase 6: Tasks ──────────────────────────────────────────────────────
+
+export type TaskStatus = 'open' | 'in_progress' | 'done' | 'cancelled';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskKind = 'general' | 'followup';
+export type TaskContext =
+  | 'none'
+  | 'approached_followup'
+  | 'engaged_followup'
+  | 'qualified_followup'
+  | 'meeting_followup'
+  | 'proposal_followup'
+  | 'no_response_followup'
+  | 'push_followup'
+  | 'interested_followup';
+
+export type TaskBucket = 'today' | 'overdue' | 'upcoming' | 'completed';
+
+/**
+ * Slim lead summary embedded in Task list responses so the UI can render
+ * the lead pill + stage badge without a second fetch.
+ */
+export interface TaskLeadRef {
+  id: string;
+  businessName: string;
+  stage: LeadStage;
+  city: string | null;
+  state: string | null;
+}
+
+export interface TaskContactRef {
+  id: string;
+  name: string;
+  contactType: ContactType;
+}
+
+export interface Task {
+  id: string;
+  leadId: string;
+  contactId: string | null;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  kind: TaskKind;
+  context: TaskContext;
+  dueAt: string | null;
+  completedAt: string | null;
+  stageAtCreation: LeadStage;
+  assignedTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present in list/findOne responses; not on create payloads. */
+  lead?: TaskLeadRef;
+  contact?: TaskContactRef | null;
+}
+
+export interface CreateTaskInput {
+  leadId: string;
+  contactId?: string;
+  title: string;
+  description?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  kind?: TaskKind;
+  context?: TaskContext;
+  dueAt?: string;
+  assignedTo?: string;
+}
+
+export type UpdateTaskInput = Partial<Omit<CreateTaskInput, 'leadId'>>;
+
+export interface TasksPage {
+  items: Task[];
+  nextCursor: string | null;
+}
+
 export interface Lead {
   id: string;
   jobId: string | null;
@@ -140,6 +217,8 @@ export interface Lead {
   followUpStatus: FollowUpStatus;
   /** Present in findOne responses (lead detail) — empty in list responses. */
   contacts?: Contact[];
+  /** Open + in-progress tasks; only populated by findOne. */
+  tasks?: Task[];
   createdAt: string;
 }
 
@@ -360,6 +439,36 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ validity }),
     }),
+
+  // tasks
+  listTasks: (params: Record<string, string | number | undefined> = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '' && v !== null) qs.set(k, String(v));
+    }
+    return request<TasksPage>(`/tasks?${qs.toString()}`);
+  },
+  taskOpenCounts: (leadIds: string[]) => {
+    if (leadIds.length === 0) return Promise.resolve({} as Record<string, number>);
+    return request<Record<string, number>>(
+      `/tasks/counts?leadIds=${leadIds.join(',')}`,
+    );
+  },
+  getTask: (id: string) => request<Task>(`/tasks/${id}`),
+  createTask: (input: CreateTaskInput) =>
+    request<Task>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateTask: (id: string, patch: UpdateTaskInput) =>
+    request<Task>(`/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteTask: (id: string) =>
+    request<{ ok: true }>(`/tasks/${id}`, { method: 'DELETE' }),
+  listLeadTasks: (leadId: string) =>
+    request<Task[]>(`/leads/${leadId}/tasks`),
 
   // contacts
   listContacts: (leadId: string) =>

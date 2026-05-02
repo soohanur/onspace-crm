@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-// v2 → added Stage + Score columns. Bumping the storage key resets users
-// to the new defaults so the new columns show up.
-const STORAGE_KEY = 'onspace.leads.columnPrefs.v2';
+// v3 → added Tasks column. Bumping the storage key resets users to the
+// new defaults so the new column shows up.
+const STORAGE_KEY = 'onspace.leads.columnPrefs.v3';
 
 export const ALL_COLUMNS = [
   { key: 'business', label: 'Business' },
   { key: 'stage', label: 'Stage' },
   { key: 'score', label: 'Score' },
+  { key: 'tasks', label: 'Tasks' },
   { key: 'categories', label: 'Categories' },
   { key: 'phone', label: 'Phone' },
   { key: 'email', label: 'Email' },
@@ -26,8 +27,8 @@ export const ALL_COLUMNS = [
 export type ColumnKey = (typeof ALL_COLUMNS)[number]['key'];
 
 const DEFAULT_VISIBLE: ColumnKey[] = [
-  'business', 'stage', 'score', 'categories', 'phone', 'email', 'website',
-  'address', 'rating', 'social', 'yp',
+  'business', 'stage', 'score', 'tasks', 'categories', 'phone', 'email',
+  'website', 'address', 'rating', 'social', 'yp',
 ];
 
 export function useColumnPrefs() {
