@@ -21,6 +21,7 @@ import { CallsModule } from './modules/calls/calls.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SequencesModule } from './modules/sequences/sequences.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     DashboardModule,
     ReportsModule,
     NotificationsModule,
+    SequencesModule,
   ],
   controllers: [HealthController],
 })

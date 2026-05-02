@@ -17,6 +17,8 @@ import {
   CampaignSummary,
   CreateTemplateInput,
   EmailTemplate,
+  SequenceStatus,
+  SequenceSummary,
 } from '@/lib/api';
 import {
   campaignStatusClass,
@@ -61,9 +63,15 @@ export default function CampaignsPage() {
 function Body() {
   const router = useRouter();
   const sp = useSearchParams();
-  const tab = sp.get('tab') === 'templates' ? 'templates' : 'campaigns';
+  const rawTab = sp.get('tab');
+  const tab: 'campaigns' | 'templates' | 'sequences' =
+    rawTab === 'templates'
+      ? 'templates'
+      : rawTab === 'sequences'
+      ? 'sequences'
+      : 'campaigns';
 
-  const setTab = (next: 'campaigns' | 'templates') => {
+  const setTab = (next: 'campaigns' | 'templates' | 'sequences') => {
     const p = new URLSearchParams(sp.toString());
     if (next === 'campaigns') p.delete('tab');
     else p.set('tab', next);
@@ -87,6 +95,12 @@ function Body() {
               <Plus size={14} /> New campaign
             </Button>
           </Link>
+        ) : tab === 'sequences' ? (
+          <Link href="/campaigns/sequences/new">
+            <Button>
+              <Plus size={14} /> New sequence
+            </Button>
+          </Link>
         ) : null}
       </div>
 
@@ -94,12 +108,21 @@ function Body() {
         <TabButton active={tab === 'campaigns'} onClick={() => setTab('campaigns')}>
           Campaigns
         </TabButton>
+        <TabButton active={tab === 'sequences'} onClick={() => setTab('sequences')}>
+          Sequences
+        </TabButton>
         <TabButton active={tab === 'templates'} onClick={() => setTab('templates')}>
           Templates
         </TabButton>
       </div>
 
-      {tab === 'campaigns' ? <CampaignsTab /> : <TemplatesTab />}
+      {tab === 'campaigns' ? (
+        <CampaignsTab />
+      ) : tab === 'sequences' ? (
+        <SequencesTab />
+      ) : (
+        <TemplatesTab />
+      )}
     </div>
   );
 }
@@ -434,5 +457,164 @@ function TemplatesTab() {
         }}
       />
     </>
+  );
+}
+
+// ─── Sequences tab ────────────────────────────────────────────────────────
+
+const SEQUENCE_STATUS_FILTERS: ('' | SequenceStatus)[] = [
+  '',
+  'draft',
+  'active',
+  'paused',
+  'archived',
+];
+
+const SEQUENCE_STATUS_LABEL: Record<SequenceStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  paused: 'Paused',
+  archived: 'Archived',
+};
+const SEQUENCE_STATUS_CLASS: Record<SequenceStatus, string> = {
+  draft: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+  active: 'bg-green-100 text-green-700 border-green-200',
+  paused: 'bg-amber-100 text-amber-700 border-amber-200',
+  archived: 'bg-zinc-200 text-zinc-700 border-zinc-300',
+};
+
+function SequencesTab() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const status = sp.get('status') ?? '';
+
+  const setStatus = (s: string) => {
+    const p = new URLSearchParams(sp.toString());
+    if (!s) p.delete('status');
+    else p.set('status', s);
+    router.replace(p.toString() ? `/campaigns?${p.toString()}` : '/campaigns');
+  };
+
+  const { data: sequences = [], isLoading } = useQuery({
+    queryKey: ['sequences', status],
+    queryFn: () =>
+      api.listSequences({
+        status: status ? [status as SequenceStatus] : undefined,
+      }),
+    refetchInterval: 10_000,
+  });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+        {SEQUENCE_STATUS_FILTERS.map((s) => (
+          <button
+            key={s || 'all'}
+            onClick={() => setStatus(s)}
+            className={clsx(
+              'px-2.5 h-7 rounded-md border text-caption font-medium',
+              (status || '') === s
+                ? 'bg-primary text-white border-primary'
+                : 'bg-surface text-ink-muted border-border hover:border-primary hover:text-primary',
+            )}
+          >
+            {s === '' ? 'All' : SEQUENCE_STATUS_LABEL[s]}
+          </button>
+        ))}
+      </div>
+
+      <Card className="!p-0 overflow-hidden">
+        {isLoading ? (
+          <div className="px-5 py-8 text-bodysm text-ink-muted">Loading…</div>
+        ) : sequences.length === 0 ? (
+          <div className="px-5 py-12 text-center text-ink-muted text-bodysm">
+            No sequences yet. Create one to send a multi-step drip to a
+            lead group.{' '}
+            <Link
+              href="/campaigns/sequences/new"
+              className="text-primary hover:underline"
+            >
+              Create one →
+            </Link>
+          </div>
+        ) : (
+          <table className="w-full text-bodysm">
+            <thead className="bg-background">
+              <tr className="text-caption uppercase tracking-[0.06em] text-neutral text-left">
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Steps</th>
+                <th className="px-4 py-3">Group</th>
+                <th className="px-4 py-3">Enrolled</th>
+                <th className="px-4 py-3">Completed</th>
+                <th className="px-4 py-3">Exited</th>
+                <th className="px-4 py-3">Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sequences.map((s) => (
+                <SequenceRow key={s.id} seq={s} />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function SequenceRow({ seq }: { seq: SequenceSummary }) {
+  return (
+    <tr
+      className="border-t border-border hover:bg-background/50 cursor-pointer"
+      onClick={() => {
+        window.location.href = `/campaigns/sequences/${seq.id}`;
+      }}
+    >
+      <td className="px-4 py-2.5">
+        <Link
+          href={`/campaigns/sequences/${seq.id}`}
+          className="text-primary hover:underline font-medium"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {seq.name}
+        </Link>
+        {seq.description && (
+          <div className="text-caption text-ink-muted truncate max-w-[300px]">
+            {seq.description}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <span
+          className={clsx(
+            'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
+            SEQUENCE_STATUS_CLASS[seq.status],
+          )}
+        >
+          {SEQUENCE_STATUS_LABEL[seq.status]}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 font-mono font-tabular">
+        {seq._count?.steps ?? seq.steps?.length ?? 0}
+      </td>
+      <td className="px-4 py-2.5 text-ink-muted">
+        {seq.group?.name ?? '—'}
+      </td>
+      <td className="px-4 py-2.5 font-mono font-tabular">
+        {seq.enrolledCount.toLocaleString()}
+      </td>
+      <td className="px-4 py-2.5 font-mono font-tabular text-success">
+        {seq.completedCount.toLocaleString()}
+      </td>
+      <td className="px-4 py-2.5 font-mono font-tabular text-ink-muted">
+        {seq.exitedCount.toLocaleString()}
+      </td>
+      <td className="px-4 py-2.5 text-caption text-ink-muted whitespace-nowrap">
+        {seq.startedAt
+          ? new Date(seq.startedAt).toLocaleDateString()
+          : '—'}
+      </td>
+    </tr>
   );
 }

@@ -18,6 +18,7 @@ import { LeadTasksPanel } from '@/components/leads/LeadTasksPanel';
 import { LeadMeetingsPanel } from '@/components/leads/LeadMeetingsPanel';
 import { LeadProposalsPanel } from '@/components/leads/LeadProposalsPanel';
 import { LeadCallsPanel } from '@/components/leads/LeadCallsPanel';
+import { LeadSequencesPanel } from '@/components/leads/LeadSequencesPanel';
 import { LeadActivityPanel } from '@/components/leads/LeadActivityPanel';
 import { LeadEmailHistory } from '@/components/leads/LeadEmailHistory';
 import { SendEmailDialog } from '@/components/leads/SendEmailDialog';
@@ -68,6 +69,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <LeadMeetingsPanel lead={data} />
           <LeadCallsPanel lead={data} />
           <LeadProposalsPanel lead={data} />
+          <LeadSequencesPanel lead={data} />
           <LeadNotesPanel leadId={id} />
           <LeadActivityPanel />
         </div>

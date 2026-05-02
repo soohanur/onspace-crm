@@ -737,6 +737,122 @@ export type DashboardEvent =
       subject: string;
     };
 
+// ─── Phase 18: Sequences ─────────────────────────────────────────────────
+
+export type SequenceStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+export type EnrollmentStatus =
+  | 'active'
+  | 'completed'
+  | 'exited_replied'
+  | 'exited_stage'
+  | 'exited_manual';
+
+export interface SequenceStep {
+  id: string;
+  sequenceId: string;
+  order: number;
+  delayDays: number;
+  templateId: string;
+  stopOnReply: boolean;
+  stopOnStageProgression: boolean;
+  createdAt: string;
+}
+
+export interface SequenceSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  status: SequenceStatus;
+  groupId: string | null;
+  accountId: string;
+  dailySendLimit: number;
+  sendIntervalSec: number;
+  enrolledCount: number;
+  completedCount: number;
+  exitedCount: number;
+  startedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  group?: { id: string; name: string } | null;
+  account?: { id: string; email: string; displayName: string | null };
+  steps?: SequenceStep[];
+  _count?: { steps: number; enrollments: number };
+}
+
+export interface SequenceEnrollment {
+  id: string;
+  sequenceId: string;
+  leadId: string;
+  contactId: string | null;
+  toEmail: string;
+  status: EnrollmentStatus;
+  nextStepOrder: number;
+  nextSendAt: string;
+  enrolledAt: string;
+  exitedAt: string | null;
+  exitReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lead?: {
+    id: string;
+    businessName: string;
+    stage: LeadStage;
+    city: string | null;
+    state: string | null;
+  };
+  contact?: { id: string; name: string; contactType: ContactType } | null;
+  sends?: SequenceEnrollmentSend[];
+  sequence?: {
+    id: string;
+    name: string;
+    status: SequenceStatus;
+    _count?: { steps: number };
+  };
+}
+
+export interface SequenceEnrollmentSend {
+  id: string;
+  enrollmentId: string;
+  stepOrder: number;
+  renderedSubject: string;
+  renderedBodyText: string;
+  renderedBodyHtml: string | null;
+  emailLogId: string | null;
+  sentAt: string;
+  emailLog?: {
+    id: string;
+    sentAt: string | null;
+    openedAt: string | null;
+    repliedAt: string | null;
+  } | null;
+}
+
+export interface CreateSequenceStepInput {
+  delayDays: number;
+  templateId: string;
+  stopOnReply?: boolean;
+  stopOnStageProgression?: boolean;
+}
+
+export interface CreateSequenceInput {
+  name: string;
+  description?: string;
+  groupId?: string;
+  accountId: string;
+  dailySendLimit?: number;
+  sendIntervalSec?: number;
+  steps: CreateSequenceStepInput[];
+}
+
+export interface UpdateSequenceInput {
+  name?: string;
+  description?: string | null;
+  dailySendLimit?: number;
+  sendIntervalSec?: number;
+}
+
 // ─── Phase 16: Notifications ─────────────────────────────────────────────
 
 export type NotificationKind =
@@ -1481,6 +1597,75 @@ export const api = {
     }),
   deleteNotification: (id: string) =>
     request<{ ok: true }>(`/notifications/${id}`, { method: 'DELETE' }),
+
+  // ─── Phase 18: Sequences ──────────────────────────────────────────────
+  listSequences: (params: { status?: SequenceStatus[] } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status?.length) qs.set('status', params.status.join(','));
+    const suffix = qs.toString();
+    return request<SequenceSummary[]>(
+      `/sequences${suffix ? `?${suffix}` : ''}`,
+    );
+  },
+  getSequence: (id: string) => request<SequenceSummary>(`/sequences/${id}`),
+  listSequenceEnrollments: (
+    id: string,
+    params: { status?: EnrollmentStatus[]; take?: number; cursor?: string } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status?.length) qs.set('status', params.status.join(','));
+    if (params.take !== undefined) qs.set('take', String(params.take));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const suffix = qs.toString();
+    return request<{ items: SequenceEnrollment[]; nextCursor: string | null }>(
+      `/sequences/${id}/enrollments${suffix ? `?${suffix}` : ''}`,
+    );
+  },
+  createSequence: (input: CreateSequenceInput) =>
+    request<SequenceSummary>('/sequences', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateSequence: (id: string, patch: UpdateSequenceInput) =>
+    request<SequenceSummary>(`/sequences/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  startSequence: (id: string) =>
+    request<{
+      sequence: SequenceSummary;
+      enrolledCount: number;
+      skippedNoEmail: number;
+    }>(`/sequences/${id}/start`, { method: 'POST' }),
+  pauseSequence: (id: string) =>
+    request<SequenceSummary>(`/sequences/${id}/pause`, { method: 'POST' }),
+  resumeSequence: (id: string) =>
+    request<SequenceSummary>(`/sequences/${id}/resume`, { method: 'POST' }),
+  archiveSequence: (id: string) =>
+    request<SequenceSummary>(`/sequences/${id}/archive`, { method: 'POST' }),
+  deleteSequence: (id: string) =>
+    request<{ ok: true }>(`/sequences/${id}`, { method: 'DELETE' }),
+  enrollLeads: (id: string, leadIds: string[]) =>
+    request<{
+      enrolled: number;
+      skippedAlreadyEnrolled: number;
+      skippedNoEmail: number;
+    }>(`/sequences/${id}/enroll`, {
+      method: 'POST',
+      body: JSON.stringify({ leadIds }),
+    }),
+  unenrollFromSequence: (id: string, enrollmentId: string) =>
+    request<SequenceEnrollment>(
+      `/sequences/${id}/enrollments/${enrollmentId}/unenroll`,
+      { method: 'POST' },
+    ),
+  listLeadSequences: (leadId: string) =>
+    request<SequenceEnrollment[]>(`/leads/${leadId}/sequences`),
+  runSequenceTick: () =>
+    request<{ sent: number; exited: number; skipped: number; scanned: number }>(
+      '/sequences/run',
+      { method: 'POST' },
+    ),
 };
 
 function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {

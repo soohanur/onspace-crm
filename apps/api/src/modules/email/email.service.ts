@@ -34,6 +34,10 @@ export interface SendInput {
    *  shape symmetric with `campaignId` even though we don't currently
    *  stamp it on the log row directly (the FK is on the proposal). */
   proposalId?: string;
+  /** Phase 18: when set, this send fulfills a sequence step. The id is
+   *  stamped on the resulting EmailLog and used by the same dedupe
+   *  guard as `campaignId` so a tick replay doesn't double-send. */
+  sequenceEnrollmentSendId?: string;
 }
 
 @Injectable()
@@ -76,6 +80,26 @@ export class EmailService {
       }
     }
 
+    // Phase 18 — same dedupe pattern keyed on the SequenceEnrollmentSend
+    // id. Worker ticks can replay (BullMQ retry, manual /run after a
+    // crash); the id is unique per (enrollment, step) so we use it as
+    // the natural idempotency key.
+    if (input.sequenceEnrollmentSendId) {
+      const existing = await this.prisma.emailLog.findFirst({
+        where: {
+          sequenceEnrollmentSendId: input.sequenceEnrollmentSendId,
+          status: { in: ['sending', 'sent'] },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (existing) {
+        this.log.warn(
+          `sequence send dedupe: send=${input.sequenceEnrollmentSendId} → returning existing log ${existing.id}`,
+        );
+        return existing;
+      }
+    }
+
     // Replying to an existing log? load it for thread + in-reply-to headers.
     let parent: { threadId: string | null; messageId: string | null; subject: string } | null = null;
     if (input.replyToLogId) {
@@ -109,6 +133,7 @@ export class EmailService {
         status: 'sending',
         provider: 'gmail',
         campaignId: input.campaignId ?? null,
+        sequenceEnrollmentSendId: input.sequenceEnrollmentSendId ?? null,
       },
     });
 
