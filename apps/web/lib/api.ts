@@ -270,6 +270,16 @@ export const api = {
   /** Returns the URL to open in a new tab so the user can complete OAuth. */
   emailConnectUrl: () => `${BASE}/api/email/auth/connect`,
 
+  emailConfig: () =>
+    request<{
+      configured: boolean;
+      clientIdMasked: string | null;
+      redirectUri: string;
+      hasSecret: boolean;
+      hasEncKey: boolean;
+      successRedirect: string;
+    }>('/email/config'),
+
   listEmailAccounts: () => request<EmailAccount[]>('/email/accounts'),
   disconnectEmailAccount: (id: string) =>
     request<{ ok: true }>(`/email/accounts/${id}`, { method: 'DELETE' }),
