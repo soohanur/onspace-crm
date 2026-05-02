@@ -61,13 +61,16 @@ export function MeetingFormModal({
     type: 'phone',
     scheduledAt: '',
     durationMin: 30,
+    attendeeEmails: [],
   });
+  const [attendeeDraft, setAttendeeDraft] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setForm({
       leadId: initial?.leadId ?? lockedLeadId ?? '',
       contactId: initial?.contactId ?? undefined,
+      accountId: initial?.accountId ?? undefined,
       title: initial?.title ?? '',
       type: initial?.type ?? 'phone',
       meetingLink: initial?.meetingLink ?? '',
@@ -77,7 +80,9 @@ export function MeetingFormModal({
       notes: initial?.notes ?? '',
       nextAction: initial?.nextAction ?? '',
       assignedTo: initial?.assignedTo ?? '',
+      attendeeEmails: initial?.attendeeEmails ?? [],
     });
+    setAttendeeDraft('');
   }, [open, initial, lockedLeadId]);
 
   const { data: contacts = [] } = useQuery({
@@ -86,8 +91,31 @@ export function MeetingFormModal({
     enabled: !!form.leadId,
   });
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['email-accounts'],
+    queryFn: api.listEmailAccounts,
+  });
+
+  // Auto-fill the first attendee from selected contact / lead.email when
+  // creating a new meeting and the field is still empty.
+  useEffect(() => {
+    if (!open || isEditMode(initial) || (form.attendeeEmails ?? []).length > 0) return;
+    if (form.contactId) {
+      const c = contacts.find((x) => x.id === form.contactId);
+      if (c?.email) {
+        setForm((f) => ({ ...f, attendeeEmails: [c.email!] }));
+        return;
+      }
+    }
+    const primary = contacts.find((c) => c.isPrimary && c.email);
+    if (primary?.email) {
+      setForm((f) => ({ ...f, attendeeEmails: [primary.email!] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.leadId, form.contactId, contacts, open]);
+
   if (!open) return null;
-  const isEdit = !!initial?.id;
+  const isEdit = isEditMode(initial);
   const canSave =
     form.title.trim().length > 0 &&
     !!form.leadId &&
@@ -115,15 +143,24 @@ export function MeetingFormModal({
           onSubmit={(e) => {
             e.preventDefault();
             if (canSave) {
+              // Flush any in-progress draft attendee email so the user
+              // doesn't have to press Enter explicitly.
+              const trailing = attendeeDraft.trim().replace(/,$/, '');
+              const finalAttendees = [...(form.attendeeEmails ?? [])];
+              if (trailing && !finalAttendees.map((x) => x.toLowerCase()).includes(trailing.toLowerCase())) {
+                finalAttendees.push(trailing);
+              }
               const payload: CreateMeetingInput & { status?: MeetingStatus } = {
                 ...form,
                 title: form.title.trim(),
                 meetingLink: form.meetingLink?.trim() || undefined,
                 scheduledAt: toIso(form.scheduledAt),
                 contactId: form.contactId || undefined,
+                accountId: form.accountId || undefined,
                 notes: form.notes?.trim() || undefined,
                 nextAction: form.nextAction?.trim() || undefined,
                 assignedTo: form.assignedTo?.trim() || undefined,
+                attendeeEmails: finalAttendees,
               };
               onSubmit(payload);
             }
@@ -210,6 +247,103 @@ export function MeetingFormModal({
               />
             </Field>
           )}
+
+          {/* Google Account picker — drives which Calendar the event lands on. */}
+          <Field label="Google account (for Calendar invite)">
+            <select
+              value={form.accountId ?? ''}
+              onChange={(e) =>
+                setForm({ ...form, accountId: e.target.value || undefined })
+              }
+              className="h-10 px-2 w-full rounded-md border border-border bg-surface text-bodysm text-ink focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
+            >
+              <option value="">Auto-pick (server decides)</option>
+              {accounts.map((a) => (
+                <option
+                  key={a.id}
+                  value={a.id}
+                  disabled={!a.hasCalendarScope}
+                >
+                  {a.email}
+                  {!a.hasCalendarScope ? '  — missing Calendar scope' : ''}
+                </option>
+              ))}
+            </select>
+            {accounts.length > 0 && !accounts.some((a) => a.hasCalendarScope) && (
+              <div className="text-caption text-warning mt-1">
+                None of your connected accounts has the Calendar scope.
+                Disconnect + reconnect from Settings to grant it.
+              </div>
+            )}
+          </Field>
+
+          <Field label="Attendees">
+            <div className="rounded-md border border-border bg-surface px-2 py-1.5 flex flex-wrap items-center gap-1 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition">
+              {(form.attendeeEmails ?? []).map((em) => (
+                <span
+                  key={em}
+                  className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-primary/10 text-primary text-[12px] font-medium"
+                >
+                  {em}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        attendeeEmails: (form.attendeeEmails ?? []).filter(
+                          (x) => x !== em,
+                        ),
+                      })
+                    }
+                    className="opacity-70 hover:opacity-100"
+                    aria-label={`Remove ${em}`}
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="email"
+                value={attendeeDraft}
+                onChange={(e) => setAttendeeDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',' || e.key === ' ' || e.key === 'Tab') {
+                    const v = attendeeDraft.trim().replace(/,$/, '');
+                    if (v) {
+                      e.preventDefault();
+                      const lower = v.toLowerCase();
+                      if (!(form.attendeeEmails ?? []).map((x) => x.toLowerCase()).includes(lower)) {
+                        setForm({
+                          ...form,
+                          attendeeEmails: [...(form.attendeeEmails ?? []), v],
+                        });
+                      }
+                      setAttendeeDraft('');
+                    }
+                  }
+                }}
+                onBlur={() => {
+                  const v = attendeeDraft.trim().replace(/,$/, '');
+                  if (v) {
+                    const lower = v.toLowerCase();
+                    if (!(form.attendeeEmails ?? []).map((x) => x.toLowerCase()).includes(lower)) {
+                      setForm({
+                        ...form,
+                        attendeeEmails: [...(form.attendeeEmails ?? []), v],
+                      });
+                    }
+                    setAttendeeDraft('');
+                  }
+                }}
+                placeholder={(form.attendeeEmails ?? []).length === 0 ? 'name@example.com' : ''}
+                className="flex-1 min-w-[140px] h-7 bg-transparent text-bodysm focus:outline-none placeholder:text-neutral"
+              />
+            </div>
+            <div className="text-caption text-ink-muted mt-1">
+              Attendees receive a calendar invite from Google when this
+              meeting is created.
+            </div>
+          </Field>
 
           <Field label="Notes">
             <textarea
@@ -320,6 +454,10 @@ function Select<T extends string>({
       ))}
     </select>
   );
+}
+
+function isEditMode(initial: Partial<Meeting> | undefined): boolean {
+  return !!initial?.id;
 }
 
 function toLocalInput(iso: string): string {

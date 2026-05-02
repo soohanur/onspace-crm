@@ -14,3 +14,10 @@ export function accountHasReadScope(scopes: string[]): boolean {
     ].includes(s),
   );
 }
+
+/** Phase 10 — Google Calendar Events (create/update/delete + invites). */
+export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+export function accountHasCalendarScope(scopes: string[]): boolean {
+  return scopes.includes(CALENDAR_EVENTS_SCOPE);
+}

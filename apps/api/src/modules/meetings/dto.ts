@@ -20,6 +20,15 @@ export class CreateMeetingDto {
   @IsUUID()
   contactId?: string;
 
+  /** EmailAccount used for GCal sync. Defaults server-side. */
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+
+  /** Free-form attendee email list — defaulted server-side from primary contact. */
+  @IsOptional()
+  attendeeEmails?: string[];
+
   @IsString() @MinLength(1) @MaxLength(300)
   title!: string;
 
@@ -62,6 +71,13 @@ export class CreateMeetingDto {
 }
 
 export class UpdateMeetingDto {
+  @IsOptional()
+  @IsUUID()
+  accountId?: string | null;
+
+  @IsOptional()
+  attendeeEmails?: string[];
+
   @IsOptional() @IsString() @MinLength(1) @MaxLength(300)
   title?: string;
 

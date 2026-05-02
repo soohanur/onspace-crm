@@ -29,6 +29,7 @@ import {
   meetingStatusLabel,
   meetingTypeIcon,
   meetingTypeLabel,
+  syncBadge,
   whenLabel,
 } from '@/lib/meetings';
 import { Card } from '@/components/ui/Card';
@@ -36,7 +37,15 @@ import { Button } from '@/components/ui/Button';
 import { StageBadge } from '@/components/leads/StageBadge';
 import { LeadTypeahead } from '@/components/tasks/LeadTypeahead';
 import { MeetingFormModal } from '@/components/meetings/MeetingFormModal';
-import { CheckCircle2, Pencil, Plus, Square, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 const TONE_CLASSES: Record<
   ReturnType<typeof whenLabel>['tone'],
@@ -153,6 +162,19 @@ function Body() {
     mutationFn: (id: string) => api.deleteMeeting(id),
     onSuccess: invalidate,
   });
+  const syncNow = useMutation({
+    mutationFn: (id: string) => api.syncMeetingNow(id),
+    onSuccess: invalidate,
+  });
+
+  // No-scope-anywhere banner: if at least one Gmail account is connected
+  // and none of them have the calendar scope, show the warning at top.
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['email-accounts'],
+    queryFn: api.listEmailAccounts,
+  });
+  const showCalendarScopeBanner =
+    accounts.length > 0 && !accounts.some((a) => a.hasCalendarScope);
 
   const items = data?.items ?? [];
 
@@ -164,13 +186,33 @@ function Body() {
           <p className="text-ink-muted text-bodysm">
             Phone, video, or in-person calls with your leads. Scheduling a
             meeting moves the lead to <strong>booked</strong>; marking one
-            completed creates an automatic follow-up task.
+            completed creates an automatic follow-up task. When the
+            connected account has the Calendar scope, attendees also
+            receive a Google Calendar invite.
           </p>
         </div>
         <Button onClick={() => setModal({ mode: 'create' })}>
           <Plus size={14} /> New meeting
         </Button>
       </div>
+
+      {showCalendarScopeBanner && (
+        <div className="mb-4 rounded-md border border-warning/40 bg-[#FEF4E5] p-3 text-bodysm flex items-start gap-2">
+          <AlertTriangle size={14} className="text-warning shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-medium text-ink">Calendar sync is disabled</div>
+            <div className="text-caption text-ink-muted mt-0.5">
+              Your connected Gmail account is missing the Calendar Events
+              scope. Meetings still save locally, but invites won't go
+              out.{' '}
+              <Link href="/settings" className="text-primary hover:underline">
+                Disconnect &amp; reconnect from Settings
+              </Link>{' '}
+              to enable invites and event creation.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-border mb-4 -mx-1 overflow-x-auto scroll-thin">
@@ -251,6 +293,7 @@ function Body() {
                 onDelete={() => {
                   if (confirm(`Delete meeting "${m.title}"?`)) remove.mutate(m.id);
                 }}
+                onRetrySync={() => syncNow.mutate(m.id)}
               />
             ))}
           </ul>
@@ -287,17 +330,21 @@ function MeetingRow({
   onComplete,
   onCancel,
   onDelete,
+  onRetrySync,
 }: {
   meeting: Meeting;
   onEdit: () => void;
   onComplete: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onRetrySync: () => void;
 }) {
   const TypeIcon = meetingTypeIcon(meeting.type);
   const when = whenLabel(meeting.scheduledAt, meeting.status);
   const canComplete = meeting.status === 'scheduled';
   const canCancel = meeting.status === 'scheduled';
+  const sync = syncBadge(meeting);
+  const SyncIcon = sync.icon;
 
   return (
     <li className="group px-5 py-3.5 hover:bg-background flex items-start gap-3">
@@ -349,39 +396,76 @@ function MeetingRow({
           </div>
         )}
       </div>
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
-        {canComplete && (
-          <button
-            onClick={onComplete}
-            title="Mark completed"
-            className="p-1 rounded-md text-neutral hover:text-success hover:bg-background"
+      <div className="flex items-start gap-2 shrink-0">
+        {sync.state === 'synced' && meeting.externalLink ? (
+          <a
+            href={meeting.externalLink}
+            target="_blank"
+            rel="noreferrer"
+            title={sync.tooltip}
+            className={clsx(
+              'inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[11px] font-medium',
+              sync.className,
+            )}
           >
-            <CheckCircle2 size={14} />
-          </button>
-        )}
-        {canCancel && (
+            <SyncIcon size={11} /> Calendar
+          </a>
+        ) : sync.state === 'failed' ? (
           <button
-            onClick={onCancel}
-            title="Cancel"
-            className="p-1 rounded-md text-neutral hover:text-warning hover:bg-background"
+            onClick={onRetrySync}
+            title={`${sync.tooltip}\nClick to retry sync`}
+            className={clsx(
+              'inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[11px] font-medium hover:opacity-80',
+              sync.className,
+            )}
           >
-            <X size={14} />
+            <SyncIcon size={11} /> {sync.label}
           </button>
-        )}
-        <button
-          onClick={onEdit}
-          title="Edit"
-          className="p-1 rounded-md text-neutral hover:text-ink hover:bg-background"
-        >
-          <Pencil size={13} />
-        </button>
-        <button
-          onClick={onDelete}
-          title="Delete"
-          className="p-1 rounded-md text-neutral hover:text-error hover:bg-background"
-        >
-          <Trash2 size={13} />
-        </button>
+        ) : null}
+
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          {canComplete && (
+            <button
+              onClick={onComplete}
+              title="Mark completed"
+              className="p-1 rounded-md text-neutral hover:text-success hover:bg-background"
+            >
+              <CheckCircle2 size={14} />
+            </button>
+          )}
+          {canCancel && (
+            <button
+              onClick={onCancel}
+              title="Cancel"
+              className="p-1 rounded-md text-neutral hover:text-warning hover:bg-background"
+            >
+              <X size={14} />
+            </button>
+          )}
+          {sync.state === 'failed' && (
+            <button
+              onClick={onRetrySync}
+              title="Retry sync"
+              className="p-1 rounded-md text-neutral hover:text-primary hover:bg-background"
+            >
+              <RefreshCw size={13} />
+            </button>
+          )}
+          <button
+            onClick={onEdit}
+            title="Edit"
+            className="p-1 rounded-md text-neutral hover:text-ink hover:bg-background"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            title="Delete"
+            className="p-1 rounded-md text-neutral hover:text-error hover:bg-background"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
     </li>
   );

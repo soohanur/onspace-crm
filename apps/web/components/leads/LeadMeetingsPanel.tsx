@@ -15,6 +15,7 @@ import {
   meetingStatusLabel,
   meetingTypeIcon,
   meetingTypeLabel,
+  syncBadge,
   whenLabel,
 } from '@/lib/meetings';
 import { Card } from '../ui/Card';
@@ -26,6 +27,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -90,6 +92,10 @@ export function LeadMeetingsPanel({ lead }: { lead: Lead }) {
     mutationFn: (id: string) => api.deleteMeeting(id),
     onSuccess: invalidate,
   });
+  const syncNow = useMutation({
+    mutationFn: (id: string) => api.syncMeetingNow(id),
+    onSuccess: invalidate,
+  });
 
   const sorted = [...meetings].sort((a, b) => {
     const rank = (m: Meeting) =>
@@ -142,6 +148,7 @@ export function LeadMeetingsPanel({ lead }: { lead: Lead }) {
               onDelete={() => {
                 if (confirm(`Delete meeting "${m.title}"?`)) remove.mutate(m.id);
               }}
+              onRetrySync={() => syncNow.mutate(m.id)}
             />
           ))}
         </ul>
@@ -178,15 +185,19 @@ function MeetingRow({
   onComplete,
   onCancel,
   onDelete,
+  onRetrySync,
 }: {
   meeting: Meeting;
   onEdit: () => void;
   onComplete: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onRetrySync: () => void;
 }) {
   const TypeIcon = meetingTypeIcon(meeting.type);
   const when = whenLabel(meeting.scheduledAt, meeting.status);
+  const sync = syncBadge(meeting);
+  const SyncIcon = sync.icon;
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -219,6 +230,31 @@ function MeetingRow({
           >
             {meetingStatusLabel(meeting.status)}
           </span>
+          {sync.state === 'synced' && meeting.externalLink ? (
+            <a
+              href={meeting.externalLink}
+              target="_blank"
+              rel="noreferrer"
+              title={sync.tooltip}
+              className={clsx(
+                'inline-flex items-center gap-1 h-5 px-1.5 rounded text-[11px] font-medium border whitespace-nowrap',
+                sync.className,
+              )}
+            >
+              <SyncIcon size={10} /> Calendar
+            </a>
+          ) : sync.state === 'failed' ? (
+            <button
+              onClick={onRetrySync}
+              title={`${sync.tooltip}\nClick to retry sync`}
+              className={clsx(
+                'inline-flex items-center gap-1 h-5 px-1.5 rounded text-[11px] font-medium border whitespace-nowrap hover:opacity-80',
+                sync.className,
+              )}
+            >
+              <SyncIcon size={10} /> {sync.label}
+            </button>
+          ) : null}
         </div>
         <div className="mt-0.5 text-caption flex items-center gap-2 flex-wrap">
           <span className={TONE_CLASSES[when.tone]}>{when.label}</span>
@@ -262,6 +298,16 @@ function MeetingRow({
                 onClick={() => {
                   setMenuOpen(false);
                   onCancel();
+                }}
+              />
+            )}
+            {sync.state === 'failed' && (
+              <MenuItem
+                icon={<RefreshCw size={12} />}
+                label="Retry sync"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRetrySync();
                 }}
               />
             )}

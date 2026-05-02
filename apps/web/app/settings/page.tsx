@@ -176,36 +176,63 @@ function SettingsPageBody() {
         ) : (
           <div className="divide-y divide-border border border-border rounded-md">
             {accounts.map((a) => (
-              <div key={a.id} className="px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Mail size={14} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">{a.email}</div>
-                  <div className="text-caption text-ink-muted">
-                    {a.displayName ?? '—'} · provider:{' '}
-                    <span className="font-mono">{a.provider}</span>
+              <div key={a.id} className="px-4 py-3 flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Mail size={14} />
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{a.email}</div>
+                    <div className="text-caption text-ink-muted">
+                      {a.displayName ?? '—'} · provider:{' '}
+                      <span className="font-mono">{a.provider}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Disconnect ${a.email}? Sending from this account will stop working.`,
+                        )
+                      ) {
+                        disconnect.mutate(a.id);
+                      }
+                    }}
+                    className="text-neutral hover:text-error inline-flex items-center gap-1 text-caption"
+                  >
+                    <Trash2 size={12} /> Disconnect
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Disconnect ${a.email}? Sending from this account will stop working.`,
-                      )
-                    ) {
-                      disconnect.mutate(a.id);
-                    }
-                  }}
-                  className="text-neutral hover:text-error inline-flex items-center gap-1 text-caption"
-                >
-                  <Trash2 size={12} /> Disconnect
-                </button>
+
+                {a.hasReadScope === false && (
+                  <ScopeBanner
+                    title="Reply detection scope is missing"
+                    body="This account is missing the gmail.readonly scope. Disconnect and reconnect to enable inbound reply polling on the chat drawer."
+                  />
+                )}
+                {a.hasCalendarScope === false && (
+                  <ScopeBanner
+                    title="Calendar Events scope is missing"
+                    body="This account is missing the Calendar Events scope. Disconnect and reconnect to enable meeting sync to Google Calendar (invites are sent automatically when this is enabled)."
+                  />
+                )}
               </div>
             ))}
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function ScopeBanner({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="ml-12 rounded-md border border-warning/40 bg-[#FEF4E5] p-2.5 text-caption flex items-start gap-2">
+      <AlertCircle size={12} className="text-warning shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <div className="font-medium text-ink">{title}</div>
+        <div className="text-ink-muted mt-0.5">{body}</div>
+      </div>
     </div>
   );
 }

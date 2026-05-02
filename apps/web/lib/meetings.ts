@@ -1,11 +1,15 @@
 import {
   Calendar,
+  CalendarCheck,
+  CalendarOff,
+  CalendarX,
   MapPin,
   Phone,
   Video,
   type LucideIcon,
 } from 'lucide-react';
 import type {
+  Meeting,
   MeetingBucket,
   MeetingStatus,
   MeetingType,
@@ -132,4 +136,47 @@ function formatAbsolute(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+/**
+ * Three-state Calendar-sync indicator. The retry-on-failure UX is wired
+ * up at the row level — this helper just classifies state.
+ */
+export function syncBadge(meeting: Meeting): {
+  state: 'synced' | 'failed' | 'none';
+  label: string;
+  className: string;
+  icon: LucideIcon;
+  tooltip: string;
+} {
+  if (meeting.externalEventId && !meeting.syncError) {
+    return {
+      state: 'synced',
+      label: 'Synced to Calendar',
+      className: 'bg-success/10 text-success border-success/20',
+      icon: CalendarCheck,
+      tooltip: meeting.externalLink
+        ? 'Click the row to open in Google Calendar'
+        : 'Synced to Google Calendar',
+    };
+  }
+  if (meeting.syncError) {
+    const isScopeIssue = /no calendar-scoped account/i.test(meeting.syncError);
+    return {
+      state: 'failed',
+      label: isScopeIssue ? 'Not synced' : 'Sync failed',
+      className: isScopeIssue
+        ? 'bg-background text-neutral border-border'
+        : 'bg-error/10 text-error border-error/20',
+      icon: isScopeIssue ? CalendarOff : CalendarX,
+      tooltip: meeting.syncError,
+    };
+  }
+  return {
+    state: 'none',
+    label: 'Not synced',
+    className: 'bg-background text-neutral border-border',
+    icon: CalendarOff,
+    tooltip: 'Not synced to Google Calendar',
+  };
 }

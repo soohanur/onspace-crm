@@ -7,6 +7,10 @@ type Credentials = Auth.Credentials;
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly', // for fetching replies
+  // Phase 10 — Google Calendar event create/update/delete + invites.
+  // Existing accounts that connected before this scope was added will need
+  // to disconnect + reconnect from Settings; we surface this in the UI.
+  'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
 ];

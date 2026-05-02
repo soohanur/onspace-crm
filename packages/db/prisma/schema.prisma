@@ -394,6 +394,7 @@ model EmailAccount {
 
   emailLogs EmailLog[]
   campaigns Campaign[]
+  meetings  Meeting[]
 
   @@index([active])
   @@map("email_accounts")
@@ -616,11 +617,16 @@ model CampaignRecipient {
 
 /// Phase 10 — meetings booked off a lead. Auto-creates a meeting_followup
 /// task on completion (idempotent) and promotes the lead to `booked` on
-/// schedule (forward-only).
+/// schedule (forward-only). When the chosen EmailAccount has the
+/// `calendar.events` scope we also create a Google Calendar event and
+/// dispatch invites — failures land in `syncError` but never fail the
+/// local DB write.
 model Meeting {
   id           String        @id @default(uuid())
   leadId       String        @map("lead_id")
   contactId    String?       @map("contact_id")
+  /// EmailAccount used to create the GCal event. Null if no calendar sync.
+  accountId    String?       @map("account_id")
   title        String
   type         MeetingType   @default(phone)
   /// Optional URL for zoom/meet/etc. Free-form for in_person ("Office, 2nd floor").
@@ -634,14 +640,30 @@ model Meeting {
   nextAction   String?       @map("next_action")
   /// Free-form attribution string until multi-tenant arrives. Phase 7+ swaps for a user FK.
   assignedTo   String?       @map("assigned_to")
+
+  /// Email addresses of intended attendees. Defaults to primary contact
+  /// email or lead.email at create time. Pass-through to GCal.
+  attendeeEmails    String[]   @default([]) @map("attendee_emails")
+
+  /// Google Calendar sync state. externalEventId is the GCal event id;
+  /// externalLink is the htmlLink GCal returns; lastSyncedAt + syncError
+  /// expose the most recent attempt to the UI.
+  externalProvider  String?    @map("external_provider")
+  externalEventId   String?    @map("external_event_id")
+  externalLink      String?    @map("external_link")
+  lastSyncedAt      DateTime?  @map("last_synced_at")
+  syncError         String?    @db.Text @map("sync_error")
+
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt      @map("updated_at")
 
-  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
-  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead    Lead          @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  contact Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
   @@index([leadId])
   @@index([status, scheduledAt])
   @@index([scheduledAt])
+  @@index([externalEventId])
   @@map("meetings")
 }

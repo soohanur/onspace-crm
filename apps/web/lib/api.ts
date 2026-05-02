@@ -284,6 +284,8 @@ export interface EmailAccount {
   createdAt: string;
   /** True if scopes include gmail.readonly (or higher) — needed for reply detection. */
   hasReadScope?: boolean;
+  /** Phase 10: true if scopes include calendar.events — needed for Google Calendar sync. */
+  hasCalendarScope?: boolean;
 }
 
 export type EmailStatus = 'queued' | 'sending' | 'sent' | 'failed';
@@ -376,6 +378,8 @@ export interface Meeting {
   id: string;
   leadId: string;
   contactId: string | null;
+  /** Phase 10: EmailAccount used for GCal sync. Null if no sync. */
+  accountId: string | null;
   title: string;
   type: MeetingType;
   meetingLink: string | null;
@@ -385,15 +389,26 @@ export interface Meeting {
   notes: string | null;
   nextAction: string | null;
   assignedTo: string | null;
+  /** Resolved attendees passed through to GCal as event attendees. */
+  attendeeEmails: string[];
+  /** Google Calendar sync state — read-only on the client. */
+  externalProvider: string | null;
+  externalEventId: string | null;
+  externalLink: string | null;
+  lastSyncedAt: string | null;
+  syncError: string | null;
   createdAt: string;
   updatedAt: string;
   lead?: { id: string; businessName: string; stage: LeadStage };
   contact?: { id: string; name: string; contactType: ContactType } | null;
+  account?: { id: string; email: string; displayName: string | null } | null;
 }
 
 export interface CreateMeetingInput {
   leadId: string;
   contactId?: string;
+  /** Optional override; server picks most-relevant active account otherwise. */
+  accountId?: string;
   title: string;
   type?: MeetingType;
   meetingLink?: string;
@@ -403,6 +418,7 @@ export interface CreateMeetingInput {
   notes?: string;
   nextAction?: string;
   assignedTo?: string;
+  attendeeEmails?: string[];
 }
 
 export type UpdateMeetingInput = Partial<Omit<CreateMeetingInput, 'leadId'>>;
@@ -862,6 +878,8 @@ export const api = {
     }),
   deleteMeeting: (id: string) =>
     request<{ ok: true }>(`/meetings/${id}`, { method: 'DELETE' }),
+  syncMeetingNow: (id: string) =>
+    request<Meeting>(`/meetings/${id}/sync-now`, { method: 'POST' }),
   listLeadMeetings: (leadId: string) =>
     request<Meeting[]>(`/leads/${leadId}/meetings`),
 };

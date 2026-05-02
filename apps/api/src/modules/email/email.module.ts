@@ -4,6 +4,7 @@ import { EmailAccountsService } from './email-accounts.service';
 import { EmailController } from './email.controller';
 import { EmailService } from './email.service';
 import { GmailService } from './gmail.service';
+import { GoogleCalendarService } from './google-calendar.service';
 import { EmailReplyPoller } from './email-reply-poller.service';
 import { TunnelService } from './tunnel.service';
 import { LeadsModule } from '../leads/leads.module';
@@ -13,11 +14,17 @@ import { LeadsModule } from '../leads/leads.module';
   controllers: [EmailAccountsController, EmailController],
   providers: [
     GmailService,
+    GoogleCalendarService,
     TunnelService,
     EmailAccountsService,
     EmailService,
     EmailReplyPoller,
   ],
-  exports: [EmailService, TunnelService],
+  exports: [
+    EmailService,
+    EmailAccountsService,
+    GoogleCalendarService,
+    TunnelService,
+  ],
 })
 export class EmailModule {}

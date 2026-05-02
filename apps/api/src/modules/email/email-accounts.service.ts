@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GmailService, GMAIL_SCOPES } from './gmail.service';
 import { decrypt, encrypt } from './crypto';
-import { accountHasReadScope } from './scopes';
+import { accountHasCalendarScope, accountHasReadScope } from './scopes';
 
 /**
  * Manages connected email accounts (OAuth tokens stored encrypted in the DB).
@@ -91,11 +91,12 @@ export class EmailAccountsService {
         createdAt: true,
       },
     });
-    // Surface whether each account has the read scope so the UI can
-    // prompt the user to reconnect when reply detection won't work.
+    // Surface whether each account has the read + calendar scopes so the
+    // UI can prompt the user to reconnect when those features won't work.
     return rows.map((a) => ({
       ...a,
       hasReadScope: accountHasReadScope(a.scopes),
+      hasCalendarScope: accountHasCalendarScope(a.scopes),
     }));
   }
 

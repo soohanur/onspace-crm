@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -66,6 +68,12 @@ export class MeetingsController {
   @Patch('meetings/:id')
   update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
     return this.meetings.update(id, dto);
+  }
+
+  @Post('meetings/:id/sync-now')
+  @HttpCode(HttpStatus.OK)
+  syncNow(@Param('id') id: string) {
+    return this.meetings.syncNow(id);
   }
 
   @Delete('meetings/:id')
