@@ -356,29 +356,72 @@ export class EmailService {
       },
     });
 
-    // Only promote to "opened" if this hit isn't suspect AND we haven't
-    // already recorded an open.
-    if (!suspect && !log.openedAt) {
-      const promoted = await this.prisma.emailLog.update({
-        where: { id: log.id },
-        data: { openedAt: now },
-        select: { leadId: true },
-      });
+    // Already opened? nothing to do.
+    if (log.openedAt) {
       this.log.log(
-        `email ${log.id} marked opened (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
+        `email ${log.id} pixel hit (already opened, age ${ageSeconds.toFixed(1)}s)`,
       );
-      // Stage automation: only fires on the FIRST real open (null -> set).
-      await this.stageAutomation.onEmailOpened(promoted.leadId);
-    } else {
-      const reason = isGmailScanner
-        ? 'GMAIL_SCANNER'
-        : isWithinPrefetchWindow
-        ? 'PREFETCH'
-        : 'ALREADY_OPENED';
+      return;
+    }
+
+    // If this hit was suspect (prefetch window OR scanner UA), log and stop.
+    if (suspect) {
+      const reason = isGmailScanner ? 'GMAIL_SCANNER' : 'PREFETCH';
       this.log.log(
         `email ${log.id} pixel hit suspected ${reason} (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
       );
+      return;
     }
+
+    // Defense layer 3 — clustered-hit gate. A single non-suspect hit does
+    // NOT promote to opened. Gmail's image proxy can fetch images for many
+    // background reasons (mobile push preview, inbox refresh in another
+    // tab, IMAP client sync, classifier scans) — those each look like
+    // ordinary GoogleImageProxy hits but are not user-driven. We require
+    // a SECOND non-suspect hit within `clusterWindow` of the first; the
+    // pattern a real reading session creates as the user scrolls and the
+    // proxy re-fetches.
+    //
+    // Trade-off: a real open whose proxy cached after one fetch will not
+    // be marked. The reply-path (`refreshReplies` further down) still
+    // back-stamps openedAt the moment a reply lands, so engaged leads
+    // are not lost.
+    const clusterWindowSeconds = Number(
+      process.env.EMAIL_OPEN_CLUSTER_WINDOW_SECONDS ?? 30,
+    );
+    const clusterWindowStart = new Date(
+      now.getTime() - clusterWindowSeconds * 1000,
+    );
+    const earlierRealHit = await this.prisma.emailPixelHit.findFirst({
+      where: {
+        emailLogId: log.id,
+        suspectedPrefetch: false,
+        hitAt: { gte: clusterWindowStart, lt: now },
+      },
+      orderBy: { hitAt: 'asc' },
+      select: { hitAt: true },
+    });
+
+    if (!earlierRealHit) {
+      this.log.log(
+        `email ${log.id} pixel hit NEEDS_CLUSTER (age ${ageSeconds.toFixed(1)}s, single non-suspect hit so far — waiting for a 2nd within ${clusterWindowSeconds}s)`,
+      );
+      return;
+    }
+
+    // Two non-suspect hits within the cluster window — promote to opened,
+    // using the FIRST hit's timestamp (more accurate "started reading at"
+    // signal than "second image rendered at").
+    const promoted = await this.prisma.emailLog.update({
+      where: { id: log.id },
+      data: { openedAt: earlierRealHit.hitAt },
+      select: { leadId: true },
+    });
+    this.log.log(
+      `email ${log.id} marked opened (cluster: 2 hits within ${clusterWindowSeconds}s, openedAt=${earlierRealHit.hitAt.toISOString()})`,
+    );
+    // Stage automation: only fires on the FIRST real open (null -> set).
+    await this.stageAutomation.onEmailOpened(promoted.leadId);
   }
 
   // ──────────────────────────────────────────────────────────────────────
