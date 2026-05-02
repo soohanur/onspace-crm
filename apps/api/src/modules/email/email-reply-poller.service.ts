@@ -13,10 +13,13 @@ export class EmailReplyPoller implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private busy = false;
 
-  /** Default 2 min. Override with EMAIL_REPLY_POLL_MINUTES env. */
+  /** Default 60 s for snappy "WhatsApp-feel" updates. Override with EMAIL_REPLY_POLL_SECONDS env. */
   private get intervalMs(): number {
+    const s = Number(process.env.EMAIL_REPLY_POLL_SECONDS);
+    if (Number.isFinite(s) && s >= 15) return s * 1_000;
     const m = Number(process.env.EMAIL_REPLY_POLL_MINUTES);
-    return Number.isFinite(m) && m > 0 ? m * 60_000 : 2 * 60_000;
+    if (Number.isFinite(m) && m > 0) return m * 60_000;
+    return 60_000;
   }
 
   constructor(private readonly emails: EmailService) {}

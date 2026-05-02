@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, EmailLog, Lead, ThreadMessage } from '@/lib/api';
-import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
-import { SendEmailDialog } from './SendEmailDialog';
 import { OpenedIndicator } from './OpenedIndicator';
+import { EmailReplyComposer } from './EmailReplyComposer';
 import {
   X,
   Mail,
@@ -18,13 +17,24 @@ import {
   XCircle,
   Clock,
   AlertCircle,
+  Check,
+  CheckCheck,
 } from 'lucide-react';
 
 /**
- * Conversation-style email detail. Shows the entire thread (every send
- * we've made + every reply we've received) in chronological order with
- * outbound (us) on the right and inbound (them) on the left, like iMessage
- * or Gmail's conversation view.
+ * WhatsApp-style conversation drawer.
+ *
+ * Behaviour:
+ *  - Outbound (us) bubbles right-aligned, primary tinted.
+ *  - Inbound (them) bubbles left-aligned, neutral.
+ *  - Outbound bubbles render WhatsApp ticks under the timestamp:
+ *      sending  → single grey ✓
+ *      sent     → grey ✓✓
+ *      opened   → green ✓✓ + "Read {time}"
+ *      failed   → red !
+ *  - Drawer auto-refreshes replies on open and every 20 s while open.
+ *    Detail also refetches every 2 s so opens / replies surface fast.
+ *  - Inline composer at the bottom (no popup) — cmd/ctrl + enter to send.
  */
 export function EmailDetailDrawer({
   lead,
@@ -36,13 +46,12 @@ export function EmailDetailDrawer({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [replyOpen, setReplyOpen] = useState(false);
 
   const { data: email, isLoading } = useQuery({
     queryKey: ['email', emailId],
     queryFn: () => api.getEmail(emailId!),
     enabled: !!emailId,
-    refetchInterval: emailId ? 5_000 : false,
+    refetchInterval: emailId ? 2_000 : false,
   });
 
   const refresh = useMutation({
@@ -53,14 +62,27 @@ export function EmailDetailDrawer({
     },
   });
 
+  // Auto-refresh: once on open, then every 20 s while drawer is mounted.
+  useEffect(() => {
+    if (!emailId) return;
+    refresh.mutate();
+    const t = setInterval(() => {
+      // skip if still in flight
+      if (!refresh.isPending) refresh.mutate();
+    }, 20_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailId]);
+
+  // Esc to close
   useEffect(() => {
     if (!emailId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !replyOpen) onClose();
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [emailId, replyOpen, onClose]);
+  }, [emailId, onClose]);
 
   if (!emailId) return null;
 
@@ -70,6 +92,7 @@ export function EmailDetailDrawer({
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
       <aside className="fixed top-0 right-0 z-50 h-full w-full max-w-[720px] bg-surface shadow-e3 flex flex-col">
+        {/* Header */}
         <header className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Mail size={16} className="text-primary shrink-0" />
@@ -79,140 +102,94 @@ export function EmailDetailDrawer({
               </div>
               <div className="text-caption text-ink-muted truncate">
                 {messages.length > 0
-                  ? `${messages.length} message${messages.length === 1 ? '' : 's'} in this thread`
+                  ? `${messages.length} message${messages.length === 1 ? '' : 's'}${refresh.isPending ? ' · syncing…' : ''}`
                   : email
                   ? `${email.fromEmail} → ${email.toEmail}`
                   : ''}
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-neutral hover:text-ink shrink-0"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+              className="h-8 w-8 rounded-md text-neutral hover:text-primary hover:bg-background flex items-center justify-center"
+              title="Sync now"
+              aria-label="Sync now"
+            >
+              <RefreshCw
+                size={14}
+                className={refresh.isPending ? 'animate-spin' : ''}
+              />
+            </button>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 rounded-md text-neutral hover:text-ink hover:bg-background flex items-center justify-center"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto scroll-thin">
+        {/* Refresh-error banner (e.g. missing readonly scope) */}
+        {refresh.error && (
+          <div className="mx-5 mt-3 rounded-md border border-error/40 bg-errorBg p-3 text-bodysm flex items-start gap-2">
+            <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="font-medium text-ink">Couldn't fetch replies</div>
+              <div className="text-caption text-ink-muted mt-0.5">
+                {(refresh.error as Error).message}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Conversation */}
+        <div className="flex-1 overflow-y-auto scroll-thin px-5 py-5 space-y-4 bg-background">
           {isLoading || !email ? (
-            <div className="p-8 text-ink-muted text-bodysm">Loading email…</div>
+            <div className="text-ink-muted text-bodysm">Loading…</div>
+          ) : messages.length === 0 ? (
+            <div className="py-8 text-center text-ink-muted text-bodysm border border-dashed border-border rounded-md bg-surface">
+              No messages.
+            </div>
           ) : (
-            <>
-              {/* Status strip — anchored to the FIRST outbound message (the tracked one) */}
-              <div className="px-5 py-3 border-b border-border bg-background space-y-1.5">
-                <div className="flex flex-wrap items-center gap-3 text-bodysm">
-                  <StatusChip status={email.status} />
-                  <span className="ml-auto text-caption text-neutral font-mono font-tabular">
-                    started {new Date(email.sentAt ?? email.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <div className="text-bodysm">
-                  <OpenedIndicator openedAt={email.openedAt} size="md" />
-                </div>
-                <div className="text-bodysm">
-                  {email.repliedAt ? (
-                    <span className="inline-flex items-center gap-1 text-success">
-                      <Reply size={13} />
-                      <span className="font-medium">Last reply</span>
-                      <span className="font-mono font-tabular">
-                        {new Date(email.repliedAt).toLocaleString()}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-neutral">
-                      <Reply size={13} />
-                      <span>No reply yet</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Refresh row */}
-              <div className="px-5 py-2 border-b border-border flex items-center justify-between text-caption">
-                <span className="text-ink-muted">
-                  {refresh.data && refresh.data.newReplies === 0 && !refresh.error
-                    ? `Last checked ${new Date().toLocaleTimeString()} — no new replies.`
-                    : ''}
-                </span>
-                <button
-                  onClick={() => refresh.mutate()}
-                  disabled={refresh.isPending}
-                  className="text-ink-muted hover:text-primary inline-flex items-center gap-1"
-                >
-                  <RefreshCw
-                    size={11}
-                    className={refresh.isPending ? 'animate-spin' : ''}
-                  />
-                  {refresh.isPending ? 'Checking…' : 'Check for replies'}
-                </button>
-              </div>
-
-              {refresh.error && (
-                <div className="mx-5 my-3 rounded-md border border-error/40 bg-errorBg p-3 text-bodysm flex items-start gap-2">
-                  <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <div className="font-medium text-ink">Couldn't fetch replies</div>
-                    <div className="text-caption text-ink-muted mt-0.5">
-                      {(refresh.error as Error).message}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Conversation */}
-              <section className="px-5 py-5 space-y-4">
-                {messages.length === 0 ? (
-                  <div className="py-8 text-center text-ink-muted text-bodysm border border-dashed border-border rounded-md">
-                    No messages.
-                  </div>
-                ) : (
-                  messages.map((m) => (
-                    <MessageBubble key={`${m.type}:${m.id}`} message={m} email={email} />
-                  ))
-                )}
-              </section>
-            </>
+            messages.map((m) => (
+              <MessageBubble
+                key={`${m.type}:${m.id}`}
+                message={m}
+                rootLogId={email.id}
+              />
+            ))
           )}
         </div>
 
-        <footer className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
-          <Button onClick={() => setReplyOpen(true)} disabled={!email}>
-            <Reply size={14} /> Reply
-          </Button>
-        </footer>
+        {/* Inline reply composer — replaces the modal popup */}
+        {email && <EmailReplyComposer lead={lead} parent={email} />}
       </aside>
-
-      {email && (
-        <SendEmailDialog
-          lead={lead}
-          open={replyOpen}
-          onClose={() => setReplyOpen(false)}
-          replyTo={email}
-        />
-      )}
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bubble
+// Bubble + WhatsApp ticks
 // ─────────────────────────────────────────────────────────────────────────
 
 function MessageBubble({
   message,
-  email,
+  rootLogId,
 }: {
   message: ThreadMessage;
-  email: EmailLog;
+  rootLogId: string;
 }) {
   const isOutbound = message.direction === 'outbound';
+  // Strip our own tracking pixel from the rendered body.
   const html = (message.bodyHtml ?? '').replace(
     /<img[^>]*src="[^"]*\/api\/email\/track\/[^"]*"[^>]*>/gi,
     '',
   );
   const text = message.bodyText ?? message.snippet ?? '';
+  const isRoot = message.type === 'log' && message.id === rootLogId;
 
   return (
     <article
@@ -230,22 +207,16 @@ function MessageBubble({
             : message.fromName ?? message.fromEmail}
         </span>
         <span className="text-neutral font-mono font-tabular">
-          {new Date(message.timestamp).toLocaleString()}
+          {formatTime(message.timestamp)}
         </span>
-        {message.type === 'log' && message.status === 'failed' && (
-          <Chip tone="negative" className="!h-5 !text-[11px]">failed</Chip>
-        )}
-        {message.type === 'log' && message.status === 'sending' && (
-          <Chip tone="primary" className="!h-5 !text-[11px]">sending</Chip>
-        )}
       </div>
 
       <div
         className={
-          'max-w-[85%] rounded-lg px-4 py-3 text-bodysm leading-relaxed border ' +
+          'max-w-[78%] rounded-2xl px-4 py-2.5 text-bodysm leading-relaxed shadow-e1 ' +
           (isOutbound
-            ? 'bg-primary/8 border-primary/20'
-            : 'bg-background border-border')
+            ? 'bg-primary/10 border border-primary/15 rounded-tr-md'
+            : 'bg-surface border border-border rounded-tl-md')
         }
       >
         {html ? (
@@ -254,11 +225,14 @@ function MessageBubble({
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <pre className="whitespace-pre-wrap font-sans">{text || '(no body)'}</pre>
+          <pre className="whitespace-pre-wrap font-sans">
+            {text || '(no body)'}
+          </pre>
         )}
 
+        {/* Attachments */}
         {message.attachments.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border space-y-1">
+          <div className="mt-3 pt-2 border-t border-border space-y-1">
             {message.attachments.map((a) => (
               <a
                 key={a.filename}
@@ -274,16 +248,27 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Open status only on the FIRST outbound (only it has the tracking pixel). */}
-        {message.type === 'log' && message.id === email.id && (
-          <div className="mt-2 pt-2 border-t border-border text-caption">
-            <OpenedIndicator openedAt={message.openedAt ?? null} />
+        {/* Footer line: WhatsApp ticks (outbound only) */}
+        {isOutbound && (
+          <div className="mt-1.5 flex items-center justify-end gap-1 text-caption text-neutral">
+            {message.error && (
+              <span className="text-error inline-flex items-center gap-1" title={message.error}>
+                <AlertCircle size={11} /> failed
+              </span>
+            )}
+            {!message.error && (
+              <Ticks
+                status={message.status}
+                openedAt={isRoot ? message.openedAt ?? null : null}
+              />
+            )}
           </div>
         )}
 
-        {message.type === 'log' && message.error && (
-          <div className="mt-2 text-caption text-error truncate" title={message.error}>
-            {message.error}
+        {/* Read indicator on the root outbound bubble */}
+        {isRoot && message.openedAt && (
+          <div className="mt-0.5 text-right text-caption text-success">
+            Read {relativeTime(new Date(message.openedAt))}
           </div>
         )}
       </div>
@@ -291,29 +276,70 @@ function MessageBubble({
   );
 }
 
-function StatusChip({ status }: { status: EmailLog['status'] }) {
-  if (status === 'sent') {
+/**
+ * WhatsApp-style ticks:
+ *   sending  → ✓     (one grey)
+ *   sent     → ✓✓   (two grey)
+ *   opened   → ✓✓   (two green)
+ *   failed   → handled separately
+ */
+function Ticks({
+  status,
+  openedAt,
+}: {
+  status: string | undefined;
+  openedAt: string | null;
+}) {
+  if (status === 'sending' || status === 'queued') {
     return (
-      <Chip tone="positive">
-        <CheckCircle2 size={11} className="mr-1" /> sent
-      </Chip>
+      <span className="inline-flex items-center text-neutral">
+        <Clock size={12} />
+      </span>
     );
   }
-  if (status === 'failed') {
-    return (
-      <Chip tone="negative">
-        <XCircle size={11} className="mr-1" /> failed
-      </Chip>
-    );
+  const opened = !!openedAt;
+  const color = opened ? 'text-success' : 'text-neutral';
+  return (
+    <span
+      className={`inline-flex items-center ${color}`}
+      title={
+        opened
+          ? `Opened ${new Date(openedAt!).toLocaleString()}`
+          : 'Sent — not opened yet'
+      }
+    >
+      <CheckCheck size={14} strokeWidth={2.4} />
+    </span>
+  );
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
-  if (status === 'sending') {
-    return (
-      <Chip tone="primary">
-        <Clock size={11} className="mr-1 animate-spin" /> sending
-      </Chip>
-    );
-  }
-  return <Chip tone="neutral">{status}</Chip>;
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function relativeTime(d: Date): string {
+  const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function formatBytes(bytes: number): string {
