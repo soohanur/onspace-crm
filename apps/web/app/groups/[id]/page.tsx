@@ -1,5 +1,9 @@
 'use client';
 
+// Same dynamic opt-out pattern as /leads/[id] — dev static-paths worker
+// otherwise crashes on the @tanstack/query-core require.
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
 import { use, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

@@ -1,5 +1,10 @@
 'use client';
 
+// useQuery + dynamic [id] segment — opt out of static-paths pre-generation
+// so the dev static-paths worker doesn't try to require vendor chunks
+// that the dev runtime hasn't built yet.
+export const dynamic = 'force-dynamic';
+
 import { useQuery } from '@tanstack/react-query';
 import { use, useState } from 'react';
 import { api } from '@/lib/api';
