@@ -225,6 +225,8 @@ export interface Lead {
   meetings?: Meeting[];
   /** Recent proposals (latest 10); only populated by findOne. */
   proposals?: Proposal[];
+  /** Recent calls (latest 10); only populated by findOne. */
+  calls?: Call[];
   createdAt: string;
 }
 
@@ -503,6 +505,77 @@ export interface SendProposalInput {
   subject: string;
   message: string;
   files: File[];
+}
+
+// ─── Phase 12: Calls ─────────────────────────────────────────────────────
+
+export type CallDirection = 'outbound' | 'inbound';
+export type CallOutcome =
+  | 'answered'
+  | 'no_answer'
+  | 'voicemail'
+  | 'busy'
+  | 'wrong_number'
+  | 'do_not_call'
+  | 'scheduled_callback';
+export type CallStatus = 'scheduled' | 'completed' | 'cancelled';
+export type CallBucket = 'scheduled' | 'today' | 'recent' | 'all';
+
+export interface Call {
+  id: string;
+  leadId: string;
+  contactId: string | null;
+  assignedTo: string | null;
+  direction: CallDirection;
+  toPhone: string | null;
+  fromPhone: string | null;
+  occurredAt: string;
+  durationSec: number | null;
+  outcome: CallOutcome | null;
+  status: CallStatus;
+  notes: string | null;
+  voicemailLeft: boolean;
+  nextAction: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lead?: {
+    id: string;
+    businessName: string;
+    stage: LeadStage;
+    city: string | null;
+    state: string | null;
+  };
+  contact?: {
+    id: string;
+    name: string;
+    contactType: ContactType;
+    phone?: string | null;
+  } | null;
+}
+
+export interface CreateCallInput {
+  leadId: string;
+  contactId?: string;
+  direction: CallDirection;
+  toPhone?: string;
+  fromPhone?: string;
+  occurredAt: string;
+  durationSec?: number;
+  outcome?: CallOutcome;
+  status?: CallStatus;
+  notes?: string;
+  voicemailLeft?: boolean;
+  nextAction?: string;
+  assignedTo?: string;
+}
+
+export type UpdateCallInput = Partial<Omit<CreateCallInput, 'leadId'>>;
+
+export interface CallsCounts {
+  scheduled: number;
+  today: number;
+  recent: number;
+  total: number;
 }
 
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
@@ -1003,4 +1076,45 @@ export const api = {
     }
     return (await res.json()) as Proposal;
   },
+
+  // ─── Phase 12: Calls ──────────────────────────────────────────────────
+  listCalls: (params: {
+    bucket?: CallBucket;
+    direction?: CallDirection[];
+    outcome?: CallOutcome[];
+    status?: CallStatus[];
+    leadId?: string;
+    assignedTo?: string;
+    take?: number;
+    cursor?: string;
+  } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.bucket) qs.set('bucket', params.bucket);
+    if (params.direction?.length) qs.set('direction', params.direction.join(','));
+    if (params.outcome?.length) qs.set('outcome', params.outcome.join(','));
+    if (params.status?.length) qs.set('status', params.status.join(','));
+    if (params.leadId) qs.set('leadId', params.leadId);
+    if (params.assignedTo) qs.set('assignedTo', params.assignedTo);
+    if (params.take) qs.set('take', String(params.take));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    return request<{ items: Call[]; nextCursor: string | null }>(
+      `/calls?${qs.toString()}`,
+    );
+  },
+  callsCounts: () => request<CallsCounts>('/calls/counts'),
+  getCall: (id: string) => request<Call>(`/calls/${id}`),
+  createCall: (input: CreateCallInput) =>
+    request<Call>('/calls', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateCall: (id: string, patch: UpdateCallInput) =>
+    request<Call>(`/calls/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteCall: (id: string) =>
+    request<{ ok: true }>(`/calls/${id}`, { method: 'DELETE' }),
+  listLeadCalls: (leadId: string) =>
+    request<Call[]>(`/leads/${leadId}/calls`),
 };

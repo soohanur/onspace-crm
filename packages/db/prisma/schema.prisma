@@ -146,6 +146,29 @@ enum ProposalStatus {
   failed
 }
 
+// ─── Phase 12: Calls ──────────────────────────────────────────────────────
+
+enum CallDirection {
+  outbound
+  inbound
+}
+
+enum CallOutcome {
+  answered
+  no_answer
+  voicemail
+  busy
+  wrong_number
+  do_not_call
+  scheduled_callback
+}
+
+enum CallStatus {
+  scheduled
+  completed
+  cancelled
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -258,6 +281,7 @@ model Lead {
   tasks            Task[]
   meetings         Meeting[]
   proposals        Proposal[]
+  calls            Call[]
   campaignRecipients CampaignRecipient[]
 
   @@unique([source, dedupHash])
@@ -300,6 +324,7 @@ model Contact {
   tasks Task[]
   meetings Meeting[]
   proposals Proposal[]
+  calls Call[]
   campaignRecipients CampaignRecipient[]
 
   @@index([leadId])
@@ -716,4 +741,40 @@ model Proposal {
   @@index([leadId])
   @@index([status])
   @@map("proposals")
+}
+
+/// Phase 12 — manual call logs. No VOIP this phase; the user logs each
+/// call after the fact (or schedules one for the future). Status
+/// completed → drives stage automation; scheduled → defers it until the
+/// user marks completed.
+model Call {
+  id             String         @id @default(uuid())
+  leadId         String         @map("lead_id")
+  contactId      String?        @map("contact_id")
+  /// Free-form attribution until multi-tenant arrives.
+  assignedTo     String?        @map("assigned_to")
+  direction      CallDirection
+  /// Outbound: toPhone is the lead. Inbound: fromPhone is the lead.
+  toPhone        String?        @map("to_phone")
+  fromPhone      String?        @map("from_phone")
+  /// When the call happened (status='completed') OR is scheduled for
+  /// (status='scheduled'). Same column drives both buckets.
+  occurredAt     DateTime       @map("occurred_at")
+  durationSec    Int?           @map("duration_sec")
+  outcome        CallOutcome?
+  status         CallStatus     @default(completed)
+  notes          String?        @db.Text
+  voicemailLeft  Boolean        @default(false) @map("voicemail_left")
+  /// Captured action item from the call ("send proposal", "schedule demo").
+  nextAction     String?        @map("next_action")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt      @map("updated_at")
+
+  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([occurredAt])
+  @@index([direction, status])
+  @@map("calls")
 }

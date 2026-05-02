@@ -225,6 +225,13 @@ export class LeadsService {
             },
           },
         },
+        calls: {
+          orderBy: { occurredAt: 'desc' },
+          take: 10,
+          include: {
+            contact: { select: { id: true, name: true, contactType: true } },
+          },
+        },
       },
     });
     if (!lead) throw new NotFoundException('Lead not found');

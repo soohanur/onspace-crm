@@ -12,6 +12,9 @@ type Trigger =
   | 'meeting_scheduled'
   | 'meeting_completed'
   | 'proposal_sent'
+  | 'call_made'
+  | 'call_answered'
+  | 'call_received'
   | 'manual';
 
 /**
@@ -285,6 +288,150 @@ export class StageAutomationService {
         `stage automation onProposalSent failed for ${leadId}: ${err instanceof Error ? err.message : err}`,
       );
     }
+  }
+
+  /**
+   * Phase 12 — call logged. Decides side-effects from the call's
+   * direction + outcome. Skips entirely when status !== 'completed'
+   * (scheduled/cancelled don't drive automation; the deferred trigger
+   * fires from CallsService.update when the call is later marked
+   * completed).
+   *
+   * Forward-only stage rules:
+   *  - outbound (any outcome) on `new`               → approached  (call_made)
+   *  - outbound 'answered' on new/approached/no_response/push → engaged (call_answered)
+   *  - inbound (any outcome) on new/approached/no_response/push → engaged (call_received)
+   *
+   * Side-effect (non-stage):
+   *  - any direction + outcome='answered' → idempotent
+   *    `interested_followup` task. Skipped on terminal stages
+   *    (converted / not_converted / lost).
+   */
+  async onCallLogged(callId: string): Promise<void> {
+    try {
+      const call = await this.prisma.call.findUnique({
+        where: { id: callId },
+        select: {
+          id: true,
+          leadId: true,
+          direction: true,
+          outcome: true,
+          status: true,
+          nextAction: true,
+        },
+      });
+      if (!call) return;
+      if (call.status !== 'completed') return;
+
+      const lead = await this.prisma.lead.findUnique({
+        where: { id: call.leadId },
+        select: { stage: true },
+      });
+      if (!lead) return;
+
+      // ─── Stage transitions (forward-only) ───────────────────────────
+      const ENGAGED_FROM = new Set<LeadStage>([
+        'new',
+        'approached',
+        'no_response',
+        'push',
+      ]);
+
+      if (call.direction === 'inbound') {
+        if (ENGAGED_FROM.has(lead.stage)) {
+          await this.applyStageChange(
+            call.leadId,
+            lead.stage,
+            'engaged',
+            'call_received',
+          );
+          this.log.log(
+            `[call] lead=${call.leadId} stage ${lead.stage} -> engaged via inbound call`,
+          );
+        }
+      } else if (call.direction === 'outbound') {
+        if (call.outcome === 'answered' && ENGAGED_FROM.has(lead.stage)) {
+          await this.applyStageChange(
+            call.leadId,
+            lead.stage,
+            'engaged',
+            'call_answered',
+          );
+          this.log.log(
+            `[call] lead=${call.leadId} stage ${lead.stage} -> engaged via answered outbound call`,
+          );
+        } else if (lead.stage === 'new') {
+          // Plain "we tried calling" — promote to approached regardless
+          // of outcome (no_answer / voicemail / busy all count as effort).
+          await this.applyStageChange(
+            call.leadId,
+            'new',
+            'approached',
+            'call_made',
+          );
+          this.log.log(
+            `[call] lead=${call.leadId} stage new -> approached via outbound call (outcome=${call.outcome ?? 'none'})`,
+          );
+        }
+      }
+
+      // ─── Idempotent interested_followup task ────────────────────────
+      if (call.outcome === 'answered') {
+        await this.ensureInterestedFollowup(call.leadId, call.nextAction);
+      }
+    } catch (err) {
+      this.log.warn(
+        `stage automation onCallLogged failed for ${callId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Idempotent helper for the post-answered-call follow-up task. Skipped
+   * on terminal stages (converted / not_converted / lost) — the lead's
+   * journey is already over. Reuses the ModuleRef pattern that
+   * ensureQualifiedFollowup uses to dodge the circular module init.
+   */
+  private async ensureInterestedFollowup(
+    leadId: string,
+    nextAction: string | null,
+  ): Promise<void> {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { stage: true },
+    });
+    if (!lead) return;
+    const TERMINAL = new Set<LeadStage>(['converted', 'not_converted', 'lost']);
+    if (TERMINAL.has(lead.stage)) return;
+
+    const existing = await this.prisma.task.findFirst({
+      where: {
+        leadId,
+        context: 'interested_followup',
+        status: { in: ['open', 'in_progress'] },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const tasks = this.moduleRef.get(TasksService, { strict: false });
+    const due = new Date();
+    due.setDate(due.getDate() + 2);
+    const description =
+      nextAction?.trim() ||
+      'Answered call — circle back if no decision was made.';
+    await tasks.create({
+      leadId,
+      title: 'Follow up on call',
+      description,
+      kind: 'followup',
+      context: 'interested_followup',
+      priority: 'medium',
+      dueAt: due.toISOString(),
+    });
+    this.log.log(
+      `[call] auto-created interested_followup task for lead=${leadId}`,
+    );
   }
 
   /**
