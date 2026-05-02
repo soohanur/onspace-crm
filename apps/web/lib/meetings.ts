@@ -139,6 +139,29 @@ function formatAbsolute(iso: string): string {
 }
 
 /**
+ * Resolve a join URL for a meeting based on its type. Phone numbers use
+ * `tel:`, video meetings use whatever link the user / sync set, and we
+ * fall back to the GCal htmlLink for everything else. Returns null when
+ * there's nothing to click.
+ */
+export function meetingJoinHref(meeting: Meeting): string | null {
+  const link = meeting.meetingLink?.trim() ?? '';
+  if (meeting.type === 'phone') {
+    if (!link) return null;
+    const digits = link.replace(/[^+\d]/g, '');
+    return digits ? `tel:${digits}` : null;
+  }
+  if (meeting.type === 'in_person') {
+    return null;
+  }
+  if (link) {
+    if (/^https?:\/\//i.test(link)) return link;
+    return `https://${link}`;
+  }
+  return meeting.externalLink ?? null;
+}
+
+/**
  * Three-state Calendar-sync indicator. The retry-on-failure UX is wired
  * up at the row level — this helper just classifies state.
  */

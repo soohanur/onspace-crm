@@ -63,8 +63,14 @@ export function MeetingFormModal({
     scheduledAt: '',
     durationMin: 30,
     attendeeEmails: [],
+    sendInvite: false,
+    emailMessage: '',
+    emailSubject: '',
   });
   const [attendeeDraft, setAttendeeDraft] = useState('');
+  // Tracks whether the user manually edited the email body so we don't
+  // clobber their edits when the auto-generated template would change.
+  const [emailDirty, setEmailDirty] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -82,8 +88,12 @@ export function MeetingFormModal({
       nextAction: initial?.nextAction ?? '',
       assignedTo: initial?.assignedTo ?? '',
       attendeeEmails: initial?.attendeeEmails ?? [],
+      sendInvite: false,
+      emailMessage: '',
+      emailSubject: '',
     });
     setAttendeeDraft('');
+    setEmailDirty(false);
   }, [open, initial, lockedLeadId]);
 
   const { data: contacts = [] } = useQuery({
@@ -92,10 +102,47 @@ export function MeetingFormModal({
     enabled: !!form.leadId,
   });
 
+  const { data: lead } = useQuery({
+    queryKey: ['lead', form.leadId || 'none'],
+    queryFn: () => api.getLead(form.leadId),
+    enabled: !!form.leadId,
+  });
+
   const { data: accounts = [] } = useQuery({
     queryKey: ['email-accounts'],
     queryFn: api.listEmailAccounts,
   });
+
+  // Suggested attendee pool: every email we know for this business —
+  // every contact with an email + the lead.email if set. Deduped, lower-
+  // case keyed, sorted with primary contact first.
+  const suggestedEmails: { email: string; label: string; isPrimary: boolean }[] = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { email: string; label: string; isPrimary: boolean }[] = [];
+    const sortedContacts = [...contacts].sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return (a.name ?? '').localeCompare(b.name ?? '');
+    });
+    for (const c of sortedContacts) {
+      if (!c.email) continue;
+      const key = c.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        email: c.email,
+        label: c.name ? `${c.name} · ${c.email}` : c.email,
+        isPrimary: !!c.isPrimary,
+      });
+    }
+    if (lead?.email) {
+      const key = lead.email.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ email: lead.email, label: `Lead · ${lead.email}`, isPrimary: false });
+      }
+    }
+    return out;
+  }, [contacts, lead?.email]);
 
   // Auto-fill the first attendee from selected contact / lead.email when
   // creating a new meeting and the field is still empty.
@@ -226,6 +273,14 @@ export function MeetingFormModal({
                 nextAction: form.nextAction?.trim() || undefined,
                 assignedTo: form.assignedTo?.trim() || undefined,
                 attendeeEmails: finalAttendees,
+                sendInvite: !!form.sendInvite && finalAttendees.length > 0,
+                // Only forward override copy when the user actually edited
+                // it — otherwise the server renders the template fresh
+                // (which can include the auto-generated Meet link).
+                emailMessage: emailDirty
+                  ? (form.emailMessage ?? '').trim() || undefined
+                  : undefined,
+                emailSubject: form.emailSubject?.trim() || undefined,
               };
               onSubmit(payload);
             }
@@ -292,8 +347,18 @@ export function MeetingFormModal({
             <Input
               value={form.meetingLink ?? ''}
               onChange={(e) => setForm({ ...form, meetingLink: e.target.value })}
-              placeholder={TYPE_LINK_PLACEHOLDER[form.type ?? 'phone']}
+              placeholder={
+                form.type === 'google_meet' && !isEdit
+                  ? 'Auto-generated when you save'
+                  : TYPE_LINK_PLACEHOLDER[form.type ?? 'phone']
+              }
             />
+            {form.type === 'google_meet' && !form.meetingLink && (
+              <div className="text-caption text-ink-muted mt-1">
+                A Google Meet link will be created automatically and
+                attached to the calendar invite.
+              </div>
+            )}
           </Field>
 
           {form.leadId && contacts.length > 0 && (
@@ -343,41 +408,85 @@ export function MeetingFormModal({
           </Field>
 
           <Field label="Attendees">
-            <div className="rounded-md border border-border bg-surface px-2 py-1.5 flex flex-wrap items-center gap-1 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition">
-              {(form.attendeeEmails ?? []).map((em) => (
-                <span
-                  key={em}
-                  className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-primary/10 text-primary text-[12px] font-medium"
-                >
-                  {em}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        attendeeEmails: (form.attendeeEmails ?? []).filter(
-                          (x) => x !== em,
-                        ),
-                      })
-                    }
-                    className="opacity-70 hover:opacity-100"
-                    aria-label={`Remove ${em}`}
-                  >
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
+            {(suggestedEmails.length > 0 || (form.attendeeEmails ?? []).length > 0) && (
+              <div className="rounded-md border border-border bg-surface p-2 space-y-1.5">
+                {suggestedEmails.map((s) => {
+                  const lower = s.email.toLowerCase();
+                  const checked = (form.attendeeEmails ?? [])
+                    .map((x) => x.toLowerCase())
+                    .includes(lower);
+                  return (
+                    <label
+                      key={s.email}
+                      className="flex items-center gap-2 text-bodysm text-ink cursor-pointer hover:bg-background rounded px-1.5 py-1"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = (form.attendeeEmails ?? []).filter(
+                            (x) => x.toLowerCase() !== lower,
+                          );
+                          if (e.target.checked) next.push(s.email);
+                          setForm({ ...form, attendeeEmails: next });
+                        }}
+                        className="accent-primary"
+                      />
+                      <span className="truncate">{s.label}</span>
+                      {s.isPrimary && (
+                        <span className="text-caption text-primary">primary</span>
+                      )}
+                    </label>
+                  );
+                })}
+                {/* Free-form additions that aren't on the contacts list */}
+                {(form.attendeeEmails ?? [])
+                  .filter(
+                    (em) =>
+                      !suggestedEmails.some(
+                        (s) => s.email.toLowerCase() === em.toLowerCase(),
+                      ),
+                  )
+                  .map((em) => (
+                    <div
+                      key={em}
+                      className="flex items-center gap-2 text-bodysm text-ink px-1.5 py-1"
+                    >
+                      <input
+                        type="checkbox"
+                        checked
+                        onChange={() =>
+                          setForm({
+                            ...form,
+                            attendeeEmails: (form.attendeeEmails ?? []).filter(
+                              (x) => x !== em,
+                            ),
+                          })
+                        }
+                        className="accent-primary"
+                      />
+                      <span className="truncate">{em}</span>
+                      <span className="text-caption text-ink-muted">other</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+            <div className="mt-1.5 flex items-center gap-2">
               <input
                 type="email"
                 value={attendeeDraft}
                 onChange={(e) => setAttendeeDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ',' || e.key === ' ' || e.key === 'Tab') {
+                  if (e.key === 'Enter' || e.key === ',') {
                     const v = attendeeDraft.trim().replace(/,$/, '');
                     if (v) {
                       e.preventDefault();
                       const lower = v.toLowerCase();
-                      if (!(form.attendeeEmails ?? []).map((x) => x.toLowerCase()).includes(lower)) {
+                      if (
+                        !(form.attendeeEmails ?? [])
+                          .map((x) => x.toLowerCase())
+                          .includes(lower)
+                      ) {
                         setForm({
                           ...form,
                           attendeeEmails: [...(form.attendeeEmails ?? []), v],
@@ -391,7 +500,11 @@ export function MeetingFormModal({
                   const v = attendeeDraft.trim().replace(/,$/, '');
                   if (v) {
                     const lower = v.toLowerCase();
-                    if (!(form.attendeeEmails ?? []).map((x) => x.toLowerCase()).includes(lower)) {
+                    if (
+                      !(form.attendeeEmails ?? [])
+                        .map((x) => x.toLowerCase())
+                        .includes(lower)
+                    ) {
                       setForm({
                         ...form,
                         attendeeEmails: [...(form.attendeeEmails ?? []), v],
@@ -400,13 +513,14 @@ export function MeetingFormModal({
                     setAttendeeDraft('');
                   }
                 }}
-                placeholder={(form.attendeeEmails ?? []).length === 0 ? 'name@example.com' : ''}
-                className="flex-1 min-w-[140px] h-7 bg-transparent text-bodysm focus:outline-none placeholder:text-neutral"
+                placeholder="Add other email…"
+                className="flex-1 h-9 px-2 rounded-md border border-border bg-surface text-bodysm text-ink focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
               />
             </div>
             <div className="text-caption text-ink-muted mt-1">
-              Attendees receive a calendar invite from Google when this
-              meeting is created.
+              Selected attendees receive a Google Calendar invite. Toggle
+              the email below to also send a personalized message from
+              your inbox.
             </div>
           </Field>
 
@@ -418,6 +532,76 @@ export function MeetingFormModal({
               className="w-full px-3 py-2 text-bodysm rounded-md border border-border bg-surface placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-none"
             />
           </Field>
+
+          {!isEdit && (form.attendeeEmails ?? []).length > 0 && (
+            <div className="rounded-md border border-border p-3 bg-background/50">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!form.sendInvite}
+                  onChange={(e) =>
+                    setForm({ ...form, sendInvite: e.target.checked })
+                  }
+                  className="accent-primary mt-0.5"
+                />
+                <div className="text-bodysm text-ink">
+                  Also send a personalized email to attendees
+                  <div className="text-caption text-ink-muted mt-0.5">
+                    On top of the calendar invite, send a one-to-one
+                    message from your inbox using the title, notes, and
+                    join link below.
+                  </div>
+                </div>
+              </label>
+              {form.sendInvite && (
+                <div className="mt-3 space-y-2">
+                  <Field label="Subject">
+                    <Input
+                      value={form.emailSubject ?? ''}
+                      onChange={(e) =>
+                        setForm({ ...form, emailSubject: e.target.value })
+                      }
+                      placeholder={`Invitation: ${form.title || 'Meeting'}`}
+                    />
+                  </Field>
+                  <Field label="Message">
+                    <textarea
+                      value={
+                        emailDirty
+                          ? form.emailMessage ?? ''
+                          : defaultInviteBody({
+                              title: form.title,
+                              notes: form.notes,
+                              type: form.type ?? 'phone',
+                              meetingLink: form.meetingLink ?? '',
+                              scheduledAt: form.scheduledAt,
+                              durationMin: form.durationMin ?? 30,
+                              contactName:
+                                contacts.find((c) => c.id === form.contactId)?.name ??
+                                contacts.find((c) => c.isPrimary)?.name ??
+                                null,
+                              businessName: lead?.businessName ?? null,
+                            })
+                      }
+                      onChange={(e) => {
+                        setEmailDirty(true);
+                        setForm({ ...form, emailMessage: e.target.value });
+                      }}
+                      rows={8}
+                      className="w-full px-3 py-2 text-bodysm rounded-md border border-border bg-surface placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-y"
+                    />
+                  </Field>
+                  <div className="text-caption text-ink-muted">
+                    Leave the message untouched to use the auto-generated
+                    template — title + notes + join link.
+                    {form.type === 'google_meet' && !form.meetingLink && (
+                      <> The Google Meet link is added after save.</>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {isEdit && (
             <div className="grid grid-cols-2 gap-3">
@@ -557,6 +741,57 @@ function toIso(localOrIso: string): string {
     return localOrIso;
   }
   return new Date(localOrIso).toISOString();
+}
+
+function defaultInviteBody(input: {
+  title: string;
+  notes?: string | null;
+  type: MeetingType;
+  meetingLink: string;
+  scheduledAt: string;
+  durationMin: number;
+  contactName: string | null;
+  businessName: string | null;
+}): string {
+  const greeting = input.contactName?.trim()
+    ? `Hi ${input.contactName.trim().split(/\s+/)[0]},`
+    : 'Hi,';
+  const start = input.scheduledAt ? new Date(toIso(input.scheduledAt)) : null;
+  const when =
+    start && !Number.isNaN(start.getTime())
+      ? formatConflictWhen(start.toISOString(), input.durationMin)
+      : '';
+  const linkLabel =
+    input.type === 'google_meet'
+      ? 'Join Google Meet'
+      : input.type === 'zoom'
+      ? 'Join Zoom'
+      : input.type === 'phone'
+      ? 'Phone'
+      : 'Join';
+  const lines: string[] = [];
+  lines.push(greeting);
+  lines.push('');
+  if (input.businessName) {
+    lines.push(
+      `Looking forward to our ${input.title || 'meeting'} with ${input.businessName}${when ? ` on ${when}` : ''}.`,
+    );
+  } else {
+    lines.push(
+      `Looking forward to our ${input.title || 'meeting'}${when ? ` on ${when}` : ''}.`,
+    );
+  }
+  if (input.notes && input.notes.trim().length > 0) {
+    lines.push('');
+    lines.push(input.notes.trim());
+  }
+  if (input.meetingLink) {
+    lines.push('');
+    lines.push(`${linkLabel}: ${input.meetingLink}`);
+  }
+  lines.push('');
+  lines.push('Talk soon.');
+  return lines.join('\n');
 }
 
 function formatConflictWhen(iso: string, durationMin: number): string {

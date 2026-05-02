@@ -24,6 +24,7 @@ import { LeadsModule } from '../leads/leads.module';
     EmailService,
     EmailAccountsService,
     GoogleCalendarService,
+    GmailService,
     TunnelService,
   ],
 })

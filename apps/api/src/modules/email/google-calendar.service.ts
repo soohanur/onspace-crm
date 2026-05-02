@@ -14,11 +14,19 @@ export interface CalendarEventInput {
   start: Date;
   end: Date;
   attendeeEmails: string[];
+  /**
+   * When true, attach a `conferenceData.createRequest` so Google
+   * generates a fresh Meet link for the event. The resulting URL comes
+   * back on the response in `hangoutLink` / `conferenceData.entryPoints`.
+   */
+  withMeet?: boolean;
 }
 
 export interface CalendarEventResult {
   eventId: string;
   htmlLink: string;
+  /** Populated when `withMeet=true` and Google succeeded in provisioning. */
+  meetLink?: string;
 }
 
 /**
@@ -58,6 +66,7 @@ export class GoogleCalendarService {
       const res = await calendar.events.insert({
         calendarId: 'primary',
         sendUpdates: 'all',
+        conferenceDataVersion: input.withMeet ? 1 : 0,
         requestBody: {
           summary: input.summary,
           description: input.description,
@@ -65,27 +74,43 @@ export class GoogleCalendarService {
           start: { dateTime: input.start.toISOString(), timeZone: SERVER_TZ },
           end: { dateTime: input.end.toISOString(), timeZone: SERVER_TZ },
           attendees: dedupeAttendees(input.attendeeEmails),
+          ...(input.withMeet
+            ? {
+                conferenceData: {
+                  createRequest: {
+                    requestId: `onspace-${Date.now()}-${Math.random()
+                      .toString(36)
+                      .slice(2, 10)}`,
+                    conferenceSolutionKey: { type: 'hangoutsMeet' },
+                  },
+                },
+              }
+            : {}),
         },
       });
       const eventId = res.data.id ?? '';
       const htmlLink = res.data.htmlLink ?? '';
+      const meetLink = pickMeetLink(res.data);
       if (!eventId) throw new Error('Calendar API returned no event id');
-      return { eventId, htmlLink };
+      return { eventId, htmlLink, meetLink };
     } catch (err) {
       throw enrichError(err, 'createEvent');
     }
   }
 
-  async updateEvent(input: CalendarEventInput & { eventId: string }): Promise<void> {
+  async updateEvent(
+    input: CalendarEventInput & { eventId: string },
+  ): Promise<{ meetLink?: string }> {
     const calendar = google.calendar({
       version: 'v3',
       auth: this.oauth2Client(input.accessToken, input.refreshToken),
     });
     try {
-      await calendar.events.patch({
+      const res = await calendar.events.patch({
         calendarId: 'primary',
         eventId: input.eventId,
         sendUpdates: 'all',
+        conferenceDataVersion: input.withMeet ? 1 : 0,
         requestBody: {
           summary: input.summary,
           description: input.description,
@@ -93,8 +118,21 @@ export class GoogleCalendarService {
           start: { dateTime: input.start.toISOString(), timeZone: SERVER_TZ },
           end: { dateTime: input.end.toISOString(), timeZone: SERVER_TZ },
           attendees: dedupeAttendees(input.attendeeEmails),
+          ...(input.withMeet
+            ? {
+                conferenceData: {
+                  createRequest: {
+                    requestId: `onspace-${Date.now()}-${Math.random()
+                      .toString(36)
+                      .slice(2, 10)}`,
+                    conferenceSolutionKey: { type: 'hangoutsMeet' },
+                  },
+                },
+              }
+            : {}),
         },
       });
+      return { meetLink: pickMeetLink(res.data) };
     } catch (err) {
       throw enrichError(err, 'updateEvent');
     }
@@ -119,6 +157,18 @@ export class GoogleCalendarService {
       throw enrichError(err, 'deleteEvent');
     }
   }
+}
+
+function pickMeetLink(
+  data: { hangoutLink?: string | null; conferenceData?: any } | undefined,
+): string | undefined {
+  if (!data) return undefined;
+  if (data.hangoutLink) return data.hangoutLink;
+  const entries = data.conferenceData?.entryPoints as
+    | { entryPointType?: string; uri?: string }[]
+    | undefined;
+  const video = entries?.find((e) => e.entryPointType === 'video' && e.uri);
+  return video?.uri ?? undefined;
 }
 
 function dedupeAttendees(emails: string[]): { email: string }[] {

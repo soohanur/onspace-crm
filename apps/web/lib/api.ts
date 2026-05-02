@@ -419,6 +419,12 @@ export interface CreateMeetingInput {
   nextAction?: string;
   assignedTo?: string;
   attendeeEmails?: string[];
+  /** Send a personalized invite email to attendees from the host's Gmail. */
+  sendInvite?: boolean;
+  /** Custom invite body — falls back to template (title + notes + link). */
+  emailMessage?: string;
+  /** Custom invite subject — falls back to "Invitation: {title}". */
+  emailSubject?: string;
 }
 
 export type UpdateMeetingInput = Partial<Omit<CreateMeetingInput, 'leadId'>>;

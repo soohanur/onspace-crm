@@ -11,6 +11,7 @@ import {
   UpdateMeetingInput,
 } from '@/lib/api';
 import {
+  meetingJoinHref,
   meetingStatusClass,
   meetingStatusLabel,
   meetingTypeIcon,
@@ -21,14 +22,17 @@ import {
 import { Card } from '../ui/Card';
 import { SectionHeader } from './LeadOverviewCard';
 import { MeetingFormModal } from '../meetings/MeetingFormModal';
+import { MeetingDetailsModal } from '../meetings/MeetingDetailsModal';
 import {
   Calendar,
   CheckCircle2,
   MoreVertical,
   Pencil,
+  Phone,
   Plus,
   RefreshCw,
   Trash2,
+  Video,
   X,
 } from 'lucide-react';
 
@@ -62,6 +66,7 @@ export function LeadMeetingsPanel({ lead }: { lead: Lead }) {
     | { mode: 'create' }
     | { mode: 'edit'; meeting: Meeting }
   >(null);
+  const [detailsMeeting, setDetailsMeeting] = useState<Meeting | null>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['lead-meetings', lead.id] });
@@ -138,6 +143,7 @@ export function LeadMeetingsPanel({ lead }: { lead: Lead }) {
             <MeetingRow
               key={m.id}
               meeting={m}
+              onOpen={() => setDetailsMeeting(m)}
               onEdit={() => setModal({ mode: 'edit', meeting: m })}
               onComplete={() =>
                 update.mutate({ id: m.id, patch: { status: 'completed' } })
@@ -175,12 +181,22 @@ export function LeadMeetingsPanel({ lead }: { lead: Lead }) {
           }
         }}
       />
+
+      <MeetingDetailsModal
+        meeting={detailsMeeting}
+        onClose={() => setDetailsMeeting(null)}
+        onEdit={(m) => {
+          setDetailsMeeting(null);
+          setModal({ mode: 'edit', meeting: m });
+        }}
+      />
     </Card>
   );
 }
 
 function MeetingRow({
   meeting,
+  onOpen,
   onEdit,
   onComplete,
   onCancel,
@@ -188,6 +204,7 @@ function MeetingRow({
   onRetrySync,
 }: {
   meeting: Meeting;
+  onOpen: () => void;
   onEdit: () => void;
   onComplete: () => void;
   onCancel: () => void;
@@ -198,6 +215,8 @@ function MeetingRow({
   const when = whenLabel(meeting.scheduledAt, meeting.status);
   const sync = syncBadge(meeting);
   const SyncIcon = sync.icon;
+  const join = meetingJoinHref(meeting);
+  const showJoin = !!join && meeting.status === 'scheduled';
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -217,7 +236,7 @@ function MeetingRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={onEdit}
+            onClick={onOpen}
             className="text-bodysm font-medium text-ink hover:text-primary text-left truncate"
           >
             {meeting.title}
@@ -230,6 +249,22 @@ function MeetingRow({
           >
             {meetingStatusLabel(meeting.status)}
           </span>
+          {showJoin && (
+            <a
+              href={join!}
+              target={join!.startsWith('tel:') ? undefined : '_blank'}
+              rel="noreferrer"
+              title={`Join ${meetingTypeLabel(meeting.type)}`}
+              className="inline-flex items-center gap-1 h-5 px-1.5 rounded bg-primary text-white text-[11px] font-medium hover:bg-primary/90 whitespace-nowrap"
+            >
+              {meeting.type === 'phone' ? (
+                <Phone size={10} />
+              ) : (
+                <Video size={10} />
+              )}
+              Join
+            </a>
+          )}
           {sync.state === 'synced' && meeting.externalLink ? (
             <a
               href={meeting.externalLink}

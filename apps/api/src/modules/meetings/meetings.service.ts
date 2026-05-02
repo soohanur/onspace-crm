@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { StageAutomationService } from '../leads/stage-automation.service';
 import { EmailAccountsService } from '../email/email-accounts.service';
+import { GmailService } from '../email/gmail.service';
 import { GoogleCalendarService } from '../email/google-calendar.service';
 import { accountHasCalendarScope } from '../email/scopes';
 import { CreateMeetingDto, UpdateMeetingDto } from './dto';
@@ -40,6 +41,7 @@ export class MeetingsService {
     private readonly stageAutomation: StageAutomationService,
     private readonly emailAccounts: EmailAccountsService,
     private readonly calendar: GoogleCalendarService,
+    private readonly gmail: GmailService,
   ) {}
 
   // ─── List / detail ─────────────────────────────────────────────────────
@@ -299,10 +301,30 @@ export class MeetingsService {
     // Sync to GCal — wrapped, never throws.
     const synced = await this.syncCreate(created.id);
 
+    // Personalized invite email — opt-in, fully best-effort. Runs AFTER
+    // sync so the auto-generated Meet URL is already persisted on the
+    // row when we render the body.
+    if (dto.sendInvite) {
+      await this.sendPersonalizedInvite(created.id, {
+        body: dto.emailMessage,
+        subject: dto.emailSubject,
+      });
+    }
+
     // Forward-only stage promotion. Independent of sync result.
     await this.stageAutomation.onMeetingScheduled(created.leadId);
 
-    return synced ?? created;
+    // Re-read so the final return reflects the meeting-link overwrite from
+    // sync (relevant for `type=google_meet`).
+    const final = await this.prisma.meeting.findUnique({
+      where: { id: created.id },
+      include: {
+        lead:    { select: { id: true, businessName: true, stage: true } },
+        contact: { select: { id: true, name: true, contactType: true } },
+        account: { select: { id: true, email: true, displayName: true } },
+      },
+    });
+    return final ?? synced ?? created;
   }
 
   async update(id: string, dto: UpdateMeetingDto) {
@@ -467,6 +489,7 @@ export class MeetingsService {
     }
     try {
       const { accessToken, refreshToken } = await this.emailAccounts.getReadyForSend(m.accountId);
+      const wantMeet = m.type === 'google_meet';
       const result = await this.calendar.createEvent({
         accessToken,
         refreshToken,
@@ -476,7 +499,17 @@ export class MeetingsService {
         start: m.scheduledAt,
         end: new Date(m.scheduledAt.getTime() + m.durationMin * 60_000),
         attendeeEmails: m.attendeeEmails,
+        withMeet: wantMeet,
       });
+      // Persist the auto-generated Meet URL back as the meeting link so
+      // the join button + email body have something concrete to point at.
+      // Only overwrite when the user didn't supply their own link.
+      if (wantMeet && result.meetLink && !m.meetingLink) {
+        await this.prisma.meeting.update({
+          where: { id: meetingId },
+          data: { meetingLink: result.meetLink },
+        });
+      }
       return this.recordSyncSuccess(meetingId, result.eventId, result.htmlLink);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -500,6 +533,7 @@ export class MeetingsService {
 
     try {
       const { accessToken, refreshToken } = await this.emailAccounts.getReadyForSend(m.accountId);
+      const wantMeet = m.type === 'google_meet';
       // No upstream event yet — fall through to create.
       if (!m.externalEventId) {
         const result = await this.calendar.createEvent({
@@ -511,10 +545,17 @@ export class MeetingsService {
           start: m.scheduledAt,
           end: new Date(m.scheduledAt.getTime() + m.durationMin * 60_000),
           attendeeEmails: m.attendeeEmails,
+          withMeet: wantMeet,
         });
+        if (wantMeet && result.meetLink && !m.meetingLink) {
+          await this.prisma.meeting.update({
+            where: { id: meetingId },
+            data: { meetingLink: result.meetLink },
+          });
+        }
         return this.recordSyncSuccess(meetingId, result.eventId, result.htmlLink);
       }
-      await this.calendar.updateEvent({
+      const patchResult = await this.calendar.updateEvent({
         accessToken,
         refreshToken,
         eventId: m.externalEventId,
@@ -524,7 +565,14 @@ export class MeetingsService {
         start: m.scheduledAt,
         end: new Date(m.scheduledAt.getTime() + m.durationMin * 60_000),
         attendeeEmails: m.attendeeEmails,
+        withMeet: wantMeet,
       });
+      if (wantMeet && patchResult.meetLink && !m.meetingLink) {
+        await this.prisma.meeting.update({
+          where: { id: meetingId },
+          data: { meetingLink: patchResult.meetLink },
+        });
+      }
       return this.recordSyncSuccess(meetingId, m.externalEventId, m.externalLink ?? '');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -563,6 +611,148 @@ export class MeetingsService {
       this.log.warn(`[meeting:${meetingId}] cancel deleteEvent failed: ${msg}`);
       return this.recordSyncFailure(meetingId, msg);
     }
+  }
+
+  /**
+   * Best-effort personalized invite email. Sent FROM the meeting's
+   * Google account TO each attendee individually so the message reads
+   * one-to-one rather than as a broadcast. All failures are logged and
+   * swallowed — never blocks meeting creation.
+   *
+   * Skips silently when:
+   *  - meeting has no attendees (nothing to send),
+   *  - meeting has no account (no scope to send from),
+   *  - the account is missing the gmail.send scope.
+   */
+  private async sendPersonalizedInvite(
+    meetingId: string,
+    opts: { body?: string; subject?: string },
+  ): Promise<void> {
+    const m = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: {
+        lead: { select: { businessName: true } },
+        contact: { select: { name: true } },
+      },
+    });
+    if (!m || !m.accountId || (m.attendeeEmails ?? []).length === 0) return;
+
+    const account = await this.prisma.emailAccount.findUnique({
+      where: { id: m.accountId },
+      select: { id: true, email: true, displayName: true, scopes: true, active: true },
+    });
+    if (!account || !account.active) return;
+    if (!account.scopes.includes('https://www.googleapis.com/auth/gmail.send')) {
+      this.log.warn(`[meeting:${meetingId}] invite email skipped — account missing gmail.send scope`);
+      return;
+    }
+
+    let tokens;
+    try {
+      tokens = await this.emailAccounts.getReadyForSend(m.accountId);
+    } catch (err) {
+      this.log.warn(`[meeting:${meetingId}] invite email skipped — token refresh failed: ${err instanceof Error ? err.message : err}`);
+      return;
+    }
+
+    const subject = (opts.subject?.trim() || `Invitation: ${m.title}`).slice(0, 300);
+    const { html, text } = this.renderInviteBody({
+      meeting: m,
+      contactName: m.contact?.name ?? null,
+      businessName: m.lead?.businessName ?? null,
+      override: opts.body,
+    });
+
+    for (const to of m.attendeeEmails ?? []) {
+      try {
+        await this.gmail.sendMail({
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          fromEmail: account.email,
+          fromName: account.displayName ?? null,
+          to,
+          subject,
+          bodyText: text,
+          bodyHtml: html,
+        });
+      } catch (err) {
+        this.log.warn(`[meeting:${meetingId}] invite email to ${to} failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+
+  /**
+   * Render the invite body. When `override` is provided it replaces the
+   * whole message; we still wrap it in a minimal HTML shell and append a
+   * footer line with the join link if there is one. Otherwise we
+   * generate from title + notes + Meet/phone link + scheduled time.
+   */
+  private renderInviteBody(input: {
+    meeting: {
+      title: string;
+      notes: string | null;
+      type: MeetingType;
+      meetingLink: string | null;
+      scheduledAt: Date;
+      durationMin: number;
+    };
+    contactName: string | null;
+    businessName: string | null;
+    override?: string;
+  }): { html: string; text: string } {
+    const { meeting, contactName, businessName, override } = input;
+    const greeting = contactName?.trim()
+      ? `Hi ${escapeHtml(contactName.trim().split(/\s+/)[0])},`
+      : 'Hi,';
+    const when = formatWhen(meeting.scheduledAt, meeting.durationMin);
+    const linkLabel =
+      meeting.type === 'google_meet'
+        ? 'Join Google Meet'
+        : meeting.type === 'zoom'
+        ? 'Join Zoom'
+        : meeting.type === 'phone'
+        ? 'Phone'
+        : 'Join';
+
+    if (override && override.trim().length > 0) {
+      const bodyHtml = escapeHtml(override).replace(/\n/g, '<br>');
+      const linkLine = meeting.meetingLink
+        ? `<p>${escapeHtml(linkLabel)}: <a href="${escapeAttr(meeting.meetingLink)}">${escapeHtml(meeting.meetingLink)}</a></p>`
+        : '';
+      const html = `<div style="font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.55">${bodyHtml}${linkLine}</div>`;
+      const text = `${override}${meeting.meetingLink ? `\n\n${linkLabel}: ${meeting.meetingLink}` : ''}`;
+      return { html, text };
+    }
+
+    const lines: string[] = [];
+    lines.push(greeting);
+    lines.push('');
+    lines.push(
+      businessName
+        ? `Looking forward to our ${meeting.title} with ${businessName} on ${when}.`
+        : `Looking forward to our ${meeting.title} on ${when}.`,
+    );
+    if (meeting.notes && meeting.notes.trim().length > 0) {
+      lines.push('');
+      lines.push(meeting.notes.trim());
+    }
+    if (meeting.meetingLink) {
+      lines.push('');
+      lines.push(`${linkLabel}: ${meeting.meetingLink}`);
+    }
+    lines.push('');
+    lines.push('Talk soon.');
+
+    const text = lines.join('\n');
+    const htmlLines = lines.map((line) => {
+      if (line === '') return '';
+      if (line.startsWith(`${linkLabel}: `) && meeting.meetingLink) {
+        return `<p>${escapeHtml(linkLabel)}: <a href="${escapeAttr(meeting.meetingLink)}">${escapeHtml(meeting.meetingLink)}</a></p>`;
+      }
+      return `<p>${escapeHtml(line)}</p>`;
+    });
+    const html = `<div style="font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.55">${htmlLines.join('')}</div>`;
+    return { html, text };
   }
 
   private async recordSyncSkip(meetingId: string, reason: string) {
@@ -723,6 +913,31 @@ export class MeetingsService {
     if (AND.length) where.AND = AND;
     return where;
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s);
+}
+
+function formatWhen(start: Date, durationMin: number): string {
+  const end = new Date(start.getTime() + durationMin * 60_000);
+  const date = start.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const t = (d: Date) =>
+    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${date}, ${t(start)}–${t(end)}`;
 }
 
 function nullify(v?: string | null): string | null | undefined {

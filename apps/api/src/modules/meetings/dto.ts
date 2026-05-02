@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsISO8601,
   IsInt,
@@ -68,6 +69,34 @@ export class CreateMeetingDto {
   @IsString()
   @MaxLength(200)
   assignedTo?: string;
+
+  /**
+   * When true (default false on create), send a personalized invite email
+   * to attendees from the same Google account that hosts the calendar
+   * event. Independent of the GCal native invite — this lands in the
+   * inbox with the user's branded message.
+   */
+  @IsOptional()
+  @IsBoolean()
+  sendInvite?: boolean;
+
+  /**
+   * Custom HTML/text body for the personalized invite. When omitted we
+   * generate one from the title + notes + scheduled time + Meet link.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10_000)
+  emailMessage?: string;
+
+  /**
+   * Subject override for the personalized invite. Defaults to
+   * "Invitation: {title}" when omitted.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  emailSubject?: string;
 }
 
 export class UpdateMeetingDto {
@@ -108,4 +137,13 @@ export class UpdateMeetingDto {
 
   @IsOptional() @IsString() @MaxLength(200)
   assignedTo?: string | null;
+
+  @IsOptional() @IsBoolean()
+  sendInvite?: boolean;
+
+  @IsOptional() @IsString() @MaxLength(10_000)
+  emailMessage?: string;
+
+  @IsOptional() @IsString() @MaxLength(300)
+  emailSubject?: string;
 }
