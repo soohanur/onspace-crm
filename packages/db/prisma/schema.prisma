@@ -121,6 +121,23 @@ enum TaskContext {
   interested_followup
 }
 
+// ─── Phase 10: Meetings ───────────────────────────────────────────────────
+
+enum MeetingType {
+  phone
+  zoom
+  google_meet
+  in_person
+  other
+}
+
+enum MeetingStatus {
+  scheduled
+  completed
+  cancelled
+  no_show
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -231,6 +248,7 @@ model Lead {
   emailLogs        EmailLog[]
   contacts         Contact[]
   tasks            Task[]
+  meetings         Meeting[]
   campaignRecipients CampaignRecipient[]
 
   @@unique([source, dedupHash])
@@ -271,6 +289,7 @@ model Contact {
 
   lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   tasks Task[]
+  meetings Meeting[]
   campaignRecipients CampaignRecipient[]
 
   @@index([leadId])
@@ -593,4 +612,36 @@ model CampaignRecipient {
   @@unique([campaignId, leadId])
   @@index([campaignId, status])
   @@map("campaign_recipients")
+}
+
+/// Phase 10 — meetings booked off a lead. Auto-creates a meeting_followup
+/// task on completion (idempotent) and promotes the lead to `booked` on
+/// schedule (forward-only).
+model Meeting {
+  id           String        @id @default(uuid())
+  leadId       String        @map("lead_id")
+  contactId    String?       @map("contact_id")
+  title        String
+  type         MeetingType   @default(phone)
+  /// Optional URL for zoom/meet/etc. Free-form for in_person ("Office, 2nd floor").
+  meetingLink  String?       @map("meeting_link")
+  scheduledAt  DateTime      @map("scheduled_at")
+  /// Duration in minutes. Default 30. Server stores; UI offers presets.
+  durationMin  Int           @default(30) @map("duration_min")
+  status       MeetingStatus @default(scheduled)
+  notes        String?       @db.Text
+  /// Free-form follow-up intention captured at meeting completion ("Send proposal", "Loop in finance").
+  nextAction   String?       @map("next_action")
+  /// Free-form attribution string until multi-tenant arrives. Phase 7+ swaps for a user FK.
+  assignedTo   String?       @map("assigned_to")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt      @map("updated_at")
+
+  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([status, scheduledAt])
+  @@index([scheduledAt])
+  @@map("meetings")
 }

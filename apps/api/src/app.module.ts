@@ -15,6 +15,7 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { EmailModule } from './modules/email/email.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { MeetingsModule } from './modules/meetings/meetings.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
     EmailModule,
     TemplatesModule,
     CampaignsModule,
+    MeetingsModule,
   ],
   controllers: [HealthController],
 })

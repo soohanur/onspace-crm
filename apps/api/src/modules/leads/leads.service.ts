@@ -202,6 +202,13 @@ export class LeadsService {
             { createdAt: 'desc' },
           ],
         },
+        meetings: {
+          where: {
+            status: 'scheduled',
+            scheduledAt: { gte: new Date() },
+          },
+          orderBy: { scheduledAt: 'asc' },
+        },
       },
     });
     if (!lead) throw new NotFoundException('Lead not found');

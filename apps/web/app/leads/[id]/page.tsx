@@ -15,6 +15,7 @@ import { LeadSocialCard } from '@/components/leads/LeadSocialCard';
 import { LeadSourceCard } from '@/components/leads/LeadSourceCard';
 import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
 import { LeadTasksPanel } from '@/components/leads/LeadTasksPanel';
+import { LeadMeetingsPanel } from '@/components/leads/LeadMeetingsPanel';
 import { LeadActivityPanel } from '@/components/leads/LeadActivityPanel';
 import { LeadEmailHistory } from '@/components/leads/LeadEmailHistory';
 import { SendEmailDialog } from '@/components/leads/SendEmailDialog';
@@ -62,6 +63,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <LeadOverviewCard lead={data} />
           <LeadEmailHistory leadId={id} onOpen={setOpenedEmailId} />
           <LeadTasksPanel lead={data} />
+          <LeadMeetingsPanel lead={data} />
           <LeadNotesPanel leadId={id} />
           <LeadActivityPanel />
         </div>

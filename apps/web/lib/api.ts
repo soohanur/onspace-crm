@@ -221,6 +221,8 @@ export interface Lead {
   contacts?: Contact[];
   /** Open + in-progress tasks; only populated by findOne. */
   tasks?: Task[];
+  /** Upcoming scheduled meetings; only populated by findOne. */
+  meetings?: Meeting[];
   createdAt: string;
 }
 
@@ -362,6 +364,54 @@ export interface EmailLog {
   threadLatestActivity?: string;
   // Full chronological thread (present in findOne response)
   messages?: ThreadMessage[];
+}
+
+// ─── Phase 10: Meetings ──────────────────────────────────────────────────
+
+export type MeetingType = 'phone' | 'zoom' | 'google_meet' | 'in_person' | 'other';
+export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+export type MeetingBucket = 'upcoming' | 'today' | 'past' | 'cancelled';
+
+export interface Meeting {
+  id: string;
+  leadId: string;
+  contactId: string | null;
+  title: string;
+  type: MeetingType;
+  meetingLink: string | null;
+  scheduledAt: string;
+  durationMin: number;
+  status: MeetingStatus;
+  notes: string | null;
+  nextAction: string | null;
+  assignedTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lead?: { id: string; businessName: string; stage: LeadStage };
+  contact?: { id: string; name: string; contactType: ContactType } | null;
+}
+
+export interface CreateMeetingInput {
+  leadId: string;
+  contactId?: string;
+  title: string;
+  type?: MeetingType;
+  meetingLink?: string;
+  scheduledAt: string;
+  durationMin?: number;
+  status?: MeetingStatus;
+  notes?: string;
+  nextAction?: string;
+  assignedTo?: string;
+}
+
+export type UpdateMeetingInput = Partial<Omit<CreateMeetingInput, 'leadId'>>;
+
+export interface MeetingsCounts {
+  upcoming: number;
+  today: number;
+  past: number;
+  cancelled: number;
 }
 
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
@@ -787,4 +837,31 @@ export const api = {
     request<GroupEmailCoverage>(`/groups/${groupId}/email-coverage`),
   getAccountTodayCount: (accountId: string) =>
     request<{ sentToday: number }>(`/email/accounts/${accountId}/today-count`),
+
+  // ─── Phase 10: Meetings ───────────────────────────────────────────────
+  listMeetings: (params: Record<string, string | number | undefined> = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '' && v !== null) qs.set(k, String(v));
+    }
+    return request<{ items: Meeting[]; nextCursor: string | null }>(
+      `/meetings?${qs.toString()}`,
+    );
+  },
+  meetingsCounts: () => request<MeetingsCounts>('/meetings/counts'),
+  getMeeting: (id: string) => request<Meeting>(`/meetings/${id}`),
+  createMeeting: (input: CreateMeetingInput) =>
+    request<Meeting>('/meetings', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateMeeting: (id: string, patch: UpdateMeetingInput) =>
+    request<Meeting>(`/meetings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteMeeting: (id: string) =>
+    request<{ ok: true }>(`/meetings/${id}`, { method: 'DELETE' }),
+  listLeadMeetings: (leadId: string) =>
+    request<Meeting[]>(`/leads/${leadId}/meetings`),
 };

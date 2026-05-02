@@ -9,6 +9,8 @@ type Trigger =
   | 'email_opened'
   | 'email_replied'
   | 'no_open_3d'
+  | 'meeting_scheduled'
+  | 'meeting_completed'
   | 'manual';
 
 /**
@@ -143,6 +145,80 @@ export class StageAutomationService {
     } catch (err) {
       this.log.warn(
         `stage automation ${trigger} failed for ${leadId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Phase 10 — meeting scheduled. Promotes any "still in funnel" lead to
+   * `booked`. Locked-from-automation set is everything `booked` and
+   * beyond, so manual proposal_sent / converted / etc. are never
+   * regressed by booking another follow-up call.
+   */
+  async onMeetingScheduled(leadId: string): Promise<void> {
+    await this.transition(
+      leadId,
+      'meeting_scheduled',
+      new Set<LeadStage>([
+        'new',
+        'approached',
+        'no_response',
+        'engaged',
+        'push',
+        'qualified',
+        'interested',
+      ]),
+      'booked',
+    );
+  }
+
+  /**
+   * Phase 10 — meeting completed. Idempotent: creates ONE open
+   * `meeting_followup` task per lead. If one already exists, no-op.
+   * Title and description pull from the meeting; `nextAction` (set on
+   * the meeting at completion time) becomes the task description when
+   * present.
+   */
+  async onMeetingCompleted(meetingId: string): Promise<void> {
+    try {
+      const meeting = await this.prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { id: true, leadId: true, title: true, nextAction: true },
+      });
+      if (!meeting) return;
+
+      const existing = await this.prisma.task.findFirst({
+        where: {
+          leadId: meeting.leadId,
+          context: 'meeting_followup',
+          status: { in: ['open', 'in_progress'] },
+        },
+        select: { id: true },
+      });
+      if (existing) return;
+
+      const tasks = this.moduleRef.get(TasksService, { strict: false });
+      const due = new Date();
+      due.setDate(due.getDate() + 2);
+      const titleBase = meeting.title.trim();
+      const title = `Meeting follow-up — ${titleBase}`.slice(0, 200);
+      await tasks.create({
+        leadId: meeting.leadId,
+        title,
+        description:
+          meeting.nextAction?.trim() ||
+          'Meeting completed — schedule the next step.',
+        kind: 'followup',
+        context: 'meeting_followup',
+        priority: 'high',
+        dueAt: due.toISOString(),
+      });
+      this.log.log(
+        `[meeting] auto-created meeting_followup task for lead=${meeting.leadId} (meeting=${meetingId})`,
+      );
+    } catch (err) {
+      this.log.warn(
+        `stage automation onMeetingCompleted failed for ${meetingId}: ${err instanceof Error ? err.message : err}`,
       );
     }
   }
