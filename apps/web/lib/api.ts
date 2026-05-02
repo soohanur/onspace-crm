@@ -737,6 +737,109 @@ export type DashboardEvent =
       subject: string;
     };
 
+// ─── Phase 15: Reports ───────────────────────────────────────────────────
+
+export interface PipelineReport {
+  total: number;
+  byStage: { stage: LeadStage; count: number; percentOfTotal: number }[];
+  conversionRates: {
+    fromStage: LeadStage;
+    toStage: LeadStage;
+    rate: number;
+    fromCount: number;
+    toCount: number;
+  }[];
+  outcomes: {
+    converted: number;
+    notConverted: number;
+    lost: number;
+  };
+}
+
+export interface CampaignReport {
+  totals: {
+    campaignsStarted: number;
+    totalRecipients: number;
+    totalSent: number;
+    totalOpens: number;
+    totalReplies: number;
+    totalBounces: number;
+    averageOpenRate: number;
+    averageReplyRate: number;
+  };
+  campaigns: {
+    id: string;
+    name: string;
+    status: CampaignStatus;
+    startedAt: string | null;
+    recipientCount: number;
+    sentCount: number;
+    openedCount: number;
+    repliedCount: number;
+    bouncedCount: number;
+    openRate: number;
+    replyRate: number;
+  }[];
+  perDay: {
+    date: string;
+    campaignsStarted: number;
+    emailsSent: number;
+  }[];
+}
+
+export interface LeadSourcesReport {
+  bySource: {
+    source: string;
+    leadCount: number;
+    qualifiedCount: number;
+    convertedCount: number;
+    qualifiedRate: number;
+    convertedRate: number;
+  }[];
+  byCategory: {
+    category: string;
+    leadCount: number;
+    qualifiedCount: number;
+    convertedCount: number;
+    qualifiedRate: number;
+    convertedRate: number;
+  }[];
+}
+
+export interface ActivityVolumeReport {
+  perDay: {
+    date: string;
+    emailsSent: number;
+    emailsOpened: number;
+    emailsReplied: number;
+    callsLogged: number;
+    meetingsHeld: number;
+    proposalsSent: number;
+    leadsAdded: number;
+  }[];
+  totals: {
+    emailsSent: number;
+    emailsOpened: number;
+    emailsReplied: number;
+    callsLogged: number;
+    meetingsHeld: number;
+    proposalsSent: number;
+    leadsAdded: number;
+  };
+}
+
+export interface FollowupHealthReport {
+  byStatus: { status: TaskStatus; count: number }[];
+  byBucket: {
+    bucket: 'today' | 'overdue' | 'upcoming' | 'completed';
+    count: number;
+  }[];
+  byContext: { context: TaskContext; count: number }[];
+  byPriority: { priority: TaskPriority; count: number }[];
+  averageCompletionDays: number | null;
+  staleOpenCount: number;
+}
+
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
 
 export interface EmailTemplate {
@@ -1301,6 +1404,23 @@ export const api = {
       `/dashboard/activity${suffix ? `?${suffix}` : ''}`,
     );
   },
+
+  // ─── Phase 15: Reports ────────────────────────────────────────────────
+  getPipelineReport: () => request<PipelineReport>('/reports/pipeline'),
+  getCampaignReport: (params: { days?: number } = {}) =>
+    request<CampaignReport>(
+      `/reports/campaigns${params.days ? `?days=${params.days}` : ''}`,
+    ),
+  getLeadSourcesReport: (params: { days?: number } = {}) =>
+    request<LeadSourcesReport>(
+      `/reports/lead-sources${params.days ? `?days=${params.days}` : ''}`,
+    ),
+  getActivityVolumeReport: (params: { days?: number } = {}) =>
+    request<ActivityVolumeReport>(
+      `/reports/activity-volume${params.days ? `?days=${params.days}` : ''}`,
+    ),
+  getFollowupHealthReport: () =>
+    request<FollowupHealthReport>('/reports/followup-health'),
 };
 
 function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {

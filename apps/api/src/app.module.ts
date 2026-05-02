@@ -19,6 +19,7 @@ import { MeetingsModule } from './modules/meetings/meetings.module';
 import { ProposalsModule } from './modules/proposals/proposals.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ProposalsModule,
     CallsModule,
     DashboardModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
 })
