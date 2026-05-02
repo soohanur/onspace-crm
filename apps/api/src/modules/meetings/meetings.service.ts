@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -94,6 +95,118 @@ export class MeetingsService {
     return m;
   }
 
+  // ─── Conflict check ────────────────────────────────────────────────────
+
+  /**
+   * Returns the first existing scheduled meeting on `accountId` whose
+   * time interval overlaps the proposed slot, or null when free. The
+   * single Prisma raw query lets us express the half-open-interval
+   * overlap rule cleanly. Same-account-only — different accounts can
+   * book the same slot.
+   *
+   * Half-open interval semantics:
+   *   conflict ⇔ existing.start < newEnd AND existing.end > newStart
+   * `newEnd = newStart + durationMin minutes`. A back-to-back booking
+   * (3:00–3:30 then 3:30–4:00) does NOT conflict.
+   *
+   * If `accountId` is null or empty we skip the check — the meeting
+   * isn't getting GCal-synced anyway, so the local "double-booking"
+   * concept doesn't apply.
+   */
+  async conflictCheck(input: {
+    accountId: string | null;
+    scheduledAt: string | Date;
+    durationMin: number;
+    excludeMeetingId?: string | null;
+  }): Promise<{
+    conflict:
+      | {
+          id: string;
+          title: string;
+          scheduledAt: string;
+          durationMin: number;
+          leadId: string;
+          leadBusinessName: string;
+        }
+      | null;
+  }> {
+    if (!input.accountId) return { conflict: null };
+    const start = new Date(input.scheduledAt);
+    if (Number.isNaN(start.getTime())) return { conflict: null };
+    const end = new Date(start.getTime() + Math.max(1, input.durationMin) * 60_000);
+
+    // We do the half-open overlap math in JS rather than SQL: the raw
+    // path got bitten by Postgres implicitly coercing `TIMESTAMP` columns
+    // against `timestamptz` binds via the session timezone, which made
+    // `scheduled_at + (duration_min * interval) > $start` silently false.
+    // Pre-filter in the DB to a tight time window, then compute the
+    // exact overlap on the few candidate rows in memory.
+    //
+    // MAX_DURATION_MIN bounds the lookback for the start side: any
+    // meeting whose start is older than (newStart − MAX_DURATION) cannot
+    // possibly still be running into our slot.
+    const MAX_DURATION_MIN = 24 * 60;
+    const lookbackStart = new Date(start.getTime() - MAX_DURATION_MIN * 60_000);
+
+    const candidates = await this.prisma.meeting.findMany({
+      where: {
+        accountId: input.accountId,
+        status: 'scheduled',
+        ...(input.excludeMeetingId ? { id: { not: input.excludeMeetingId } } : {}),
+        scheduledAt: { gt: lookbackStart, lt: end },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        scheduledAt: true,
+        durationMin: true,
+        leadId: true,
+        lead: { select: { businessName: true } },
+      },
+    });
+
+    const newStartMs = start.getTime();
+    const newEndMs = end.getTime();
+    const hit = candidates.find((c) => {
+      const cStart = c.scheduledAt.getTime();
+      const cEnd = cStart + c.durationMin * 60_000;
+      // half-open overlap: existing.start < newEnd AND existing.end > newStart
+      return cStart < newEndMs && cEnd > newStartMs;
+    });
+    if (!hit) return { conflict: null };
+    return {
+      conflict: {
+        id: hit.id,
+        title: hit.title,
+        scheduledAt: hit.scheduledAt.toISOString(),
+        durationMin: hit.durationMin,
+        leadId: hit.leadId,
+        leadBusinessName: hit.lead?.businessName ?? '(unknown)',
+      },
+    };
+  }
+
+  /**
+   * Throws ConflictException when the proposed slot overlaps an
+   * existing scheduled meeting on the same account. Used by
+   * create() / update() before any DB write or GCal call.
+   */
+  private async assertNoConflict(input: {
+    accountId: string | null;
+    scheduledAt: string | Date;
+    durationMin: number;
+    excludeMeetingId?: string | null;
+  }): Promise<void> {
+    const { conflict } = await this.conflictCheck(input);
+    if (!conflict) return;
+    throw new ConflictException({
+      statusCode: 409,
+      message: 'Time conflicts with another scheduled meeting on this account',
+      conflict,
+    });
+  }
+
   async bucketCounts() {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -148,6 +261,17 @@ export class MeetingsService {
 
     // Resolve account for sync.
     const accountId = await this.resolveAccountId(dto.leadId, dto.accountId);
+
+    // Conflict guard runs ONLY when we have an account — see comment on
+    // `conflictCheck`. Throws 409 with the colliding meeting's summary
+    // before any DB write or GCal call.
+    if ((dto.status ?? 'scheduled') === 'scheduled') {
+      await this.assertNoConflict({
+        accountId,
+        scheduledAt: dto.scheduledAt,
+        durationMin: dto.durationMin ?? 30,
+      });
+    }
 
     const created = await this.prisma.meeting.create({
       data: {
@@ -215,6 +339,30 @@ export class MeetingsService {
       data.account = dto.accountId
         ? { connect: { id: dto.accountId } }
         : { disconnect: true };
+    }
+
+    // Conflict check — only fires when one of the four scheduling-shape
+    // fields actually changes. If the user is just editing notes /
+    // status to completed / etc., the slot itself isn't moving so we
+    // skip the query. Status changes that move OUT of `scheduled`
+    // also skip (cancelled / completed don't book the slot anymore).
+    const willStaySchedulable =
+      (dto.status ?? existing.status) === 'scheduled';
+    const slotMoved =
+      dto.scheduledAt !== undefined ||
+      dto.durationMin !== undefined ||
+      dto.accountId !== undefined ||
+      (dto.status !== undefined && dto.status !== existing.status);
+    if (slotMoved && willStaySchedulable) {
+      await this.assertNoConflict({
+        accountId:
+          dto.accountId !== undefined ? dto.accountId ?? null : existing.accountId,
+        scheduledAt:
+          dto.scheduledAt !== undefined ? dto.scheduledAt : existing.scheduledAt,
+        durationMin:
+          dto.durationMin !== undefined ? dto.durationMin : existing.durationMin,
+        excludeMeetingId: id,
+      });
     }
 
     const updated = await this.prisma.meeting.update({

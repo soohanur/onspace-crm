@@ -55,6 +55,31 @@ export class MeetingsController {
     return this.meetings.bucketCounts();
   }
 
+  /**
+   * Pre-flight check from the form modal: does this proposed slot
+   * collide with another scheduled meeting on the same account?
+   * Returns `{ conflict: <summary> | null }`. Does NOT throw — the form
+   * uses this for live validation and disables Save itself; the
+   * server-side enforcement lives in MeetingsService.create / update.
+   */
+  @Get('meetings/conflict-check')
+  conflictCheck(
+    @Query('accountId') accountId: string | undefined,
+    @Query('scheduledAt') scheduledAt: string | undefined,
+    @Query('durationMin') durationMin: string | undefined,
+    @Query('excludeMeetingId') excludeMeetingId: string | undefined,
+  ) {
+    if (!accountId || !scheduledAt) return { conflict: null };
+    const dur = Number(durationMin);
+    if (!Number.isFinite(dur) || dur < 1) return { conflict: null };
+    return this.meetings.conflictCheck({
+      accountId,
+      scheduledAt,
+      durationMin: dur,
+      excludeMeetingId: excludeMeetingId || null,
+    });
+  }
+
   @Get('meetings/:id')
   findOne(@Param('id') id: string) {
     return this.meetings.findOne(id);

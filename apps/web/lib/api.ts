@@ -430,6 +430,15 @@ export interface MeetingsCounts {
   cancelled: number;
 }
 
+export interface MeetingConflictSummary {
+  id: string;
+  title: string;
+  scheduledAt: string;
+  durationMin: number;
+  leadId: string;
+  leadBusinessName: string;
+}
+
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
 
 export interface EmailTemplate {
@@ -882,4 +891,19 @@ export const api = {
     request<Meeting>(`/meetings/${id}/sync-now`, { method: 'POST' }),
   listLeadMeetings: (leadId: string) =>
     request<Meeting[]>(`/leads/${leadId}/meetings`),
+  checkMeetingConflict: (params: {
+    accountId: string;
+    scheduledAt: string;
+    durationMin: number;
+    excludeMeetingId?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    qs.set('accountId', params.accountId);
+    qs.set('scheduledAt', params.scheduledAt);
+    qs.set('durationMin', String(params.durationMin));
+    if (params.excludeMeetingId) qs.set('excludeMeetingId', params.excludeMeetingId);
+    return request<{ conflict: MeetingConflictSummary | null }>(
+      `/meetings/conflict-check?${qs.toString()}`,
+    );
+  },
 };

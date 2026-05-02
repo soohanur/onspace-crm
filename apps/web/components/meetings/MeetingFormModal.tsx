@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   api,
   CreateMeetingInput,
   Meeting,
+  MeetingConflictSummary,
   MeetingStatus,
   MeetingType,
 } from '@/lib/api';
@@ -18,7 +19,7 @@ import {
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { LeadTypeahead } from '../tasks/LeadTypeahead';
-import { X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
 
@@ -114,13 +115,77 @@ export function MeetingFormModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.leadId, form.contactId, contacts, open]);
 
+  // Resolve which account the live conflict-check should target. We only
+  // run the check when there's a concrete account to query against —
+  // "auto-pick" leaves account resolution to the server, where
+  // assertNoConflict still runs and returns 409 if there's a clash.
+  const effectiveAccountId = form.accountId || initial?.accountId || '';
+  const effectiveStatus = form.status ?? initial?.status ?? 'scheduled';
+
+  // Debounce the (accountId, scheduledAt, durationMin) tuple by 350ms so
+  // we don't hammer the API on every keystroke / scrub.
+  const [debounced, setDebounced] = useState<{
+    accountId: string;
+    scheduledAt: string;
+    durationMin: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (
+      !effectiveAccountId ||
+      !form.scheduledAt ||
+      !form.durationMin ||
+      effectiveStatus !== 'scheduled'
+    ) {
+      setDebounced(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      setDebounced({
+        accountId: effectiveAccountId,
+        scheduledAt: toIso(form.scheduledAt),
+        durationMin: form.durationMin!,
+      });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [open, effectiveAccountId, form.scheduledAt, form.durationMin, effectiveStatus]);
+
+  const conflictKey = useMemo(
+    () =>
+      debounced
+        ? [
+            'meeting-conflict',
+            debounced.accountId,
+            debounced.scheduledAt,
+            debounced.durationMin,
+            initial?.id ?? '',
+          ]
+        : ['meeting-conflict', 'idle'],
+    [debounced, initial?.id],
+  );
+  const conflictQuery = useQuery({
+    queryKey: conflictKey,
+    queryFn: () =>
+      api.checkMeetingConflict({
+        accountId: debounced!.accountId,
+        scheduledAt: debounced!.scheduledAt,
+        durationMin: debounced!.durationMin,
+        excludeMeetingId: initial?.id,
+      }),
+    enabled: !!debounced,
+    staleTime: 5_000,
+  });
+  const conflict: MeetingConflictSummary | null =
+    conflictQuery.data?.conflict ?? null;
+
   if (!open) return null;
   const isEdit = isEditMode(initial);
   const canSave =
     form.title.trim().length > 0 &&
     !!form.leadId &&
     !!form.scheduledAt &&
-    !pending;
+    !pending &&
+    !conflict;
 
   const completing = isEdit && form.status === 'completed' && initial?.status !== 'completed';
 
@@ -395,6 +460,24 @@ export function MeetingFormModal({
             </div>
           )}
 
+          {conflict && (
+            <div className="rounded-md border border-error/40 bg-error/5 p-3 flex gap-2 items-start">
+              <AlertTriangle size={14} className="text-error mt-0.5 shrink-0" />
+              <div className="text-bodysm text-error">
+                <div className="font-medium">Time conflict on this account</div>
+                <div className="text-caption text-ink-muted mt-0.5">
+                  Overlaps with{' '}
+                  <strong className="text-ink">{conflict.title}</strong>
+                  {' · '}
+                  {formatConflictWhen(conflict.scheduledAt, conflict.durationMin)}
+                  {' · '}
+                  <span className="text-ink-muted">
+                    {conflict.leadBusinessName}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="text-caption text-error truncate" title={error}>
               {error}
@@ -474,4 +557,21 @@ function toIso(localOrIso: string): string {
     return localOrIso;
   }
   return new Date(localOrIso).toISOString();
+}
+
+function formatConflictWhen(iso: string, durationMin: number): string {
+  const start = new Date(iso);
+  if (Number.isNaN(start.getTime())) return '';
+  const end = new Date(start.getTime() + durationMin * 60_000);
+  const sameDay =
+    start.toDateString() === end.toDateString();
+  const date = start.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+  const t = (d: Date) =>
+    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return sameDay
+    ? `${date}, ${t(start)}–${t(end)}`
+    : `${date} ${t(start)} → ${end.toLocaleDateString()} ${t(end)}`;
 }
