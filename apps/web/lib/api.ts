@@ -125,6 +125,51 @@ export interface CreateGroupInput {
   color?: string;
 }
 
+export interface EmailAccount {
+  id: string;
+  email: string;
+  displayName: string | null;
+  provider: 'gmail';
+  scopes: string[];
+  active: boolean;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export type EmailStatus = 'queued' | 'sending' | 'sent' | 'failed';
+
+export interface EmailLog {
+  id: string;
+  leadId: string;
+  accountId: string | null;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string;
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  status: EmailStatus;
+  provider: string;
+  messageId: string | null;
+  threadId: string | null;
+  error: string | null;
+  openedAt: string | null;
+  repliedAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface SendEmailInput {
+  leadId: string;
+  accountId?: string;
+  toEmail: string;
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
+  bodyHtml?: string;
+}
+
 export const api = {
   health: () => request<{ ok: boolean }>('/health'),
 
@@ -220,4 +265,21 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ leadIds }),
     }),
+
+  // ─── Email ───
+  /** Returns the URL to open in a new tab so the user can complete OAuth. */
+  emailConnectUrl: () => `${BASE}/api/email/auth/connect`,
+
+  listEmailAccounts: () => request<EmailAccount[]>('/email/accounts'),
+  disconnectEmailAccount: (id: string) =>
+    request<{ ok: true }>(`/email/accounts/${id}`, { method: 'DELETE' }),
+
+  sendEmail: (input: SendEmailInput) =>
+    request<EmailLog>('/email/send', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  listEmailHistory: (leadId: string) =>
+    request<EmailLog[]>(`/leads/${leadId}/emails`),
 };

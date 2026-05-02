@@ -25,6 +25,13 @@ enum GroupType {
   smart
 }
 
+enum EmailStatus {
+  queued
+  sending
+  sent
+  failed
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -118,6 +125,7 @@ model Lead {
   job              ScrapeJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
   groupMemberships LeadGroupMember[]
   notes            Note[]
+  emailLogs        EmailLog[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
@@ -170,4 +178,75 @@ model Note {
 
   @@index([leadId, createdAt])
   @@map("notes")
+}
+
+// ─── Email sending (Phase 3, MVP) ─────────────────────────────────────────
+//
+// EmailAccount holds OAuth credentials for an outbox the user has connected
+// (currently only Gmail). Refresh tokens are encrypted at rest using
+// EMAIL_TOKEN_ENC_KEY (AES-256-GCM, see apps/api/.../crypto.ts).
+
+model EmailAccount {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String?  @map("display_name")
+  provider     String   @default("gmail")     // gmail|outlook|smtp
+  accessToken  String   @db.Text @map("access_token")
+  refreshToken String   @db.Text @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  scopes       String[] @default([])
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  emailLogs EmailLog[]
+
+  @@index([active])
+  @@map("email_accounts")
+}
+
+// EmailLog is one record per send attempt. Reply / open / click / bounce
+// columns are present but unused in MVP — they hook into pixel + IMAP
+// listeners we'll add in Phase 4.
+
+model EmailLog {
+  id        String      @id @default(uuid())
+  leadId    String      @map("lead_id")
+  accountId String?     @map("account_id")
+
+  fromEmail String      @map("from_email")
+  fromName  String?     @map("from_name")
+  toEmail   String      @map("to_email")
+  cc        String[]    @default([])
+  bcc       String[]    @default([])
+  subject   String
+  bodyHtml  String?     @db.Text @map("body_html")
+  bodyText  String?     @db.Text @map("body_text")
+
+  status    EmailStatus @default(queued)
+  provider  String      @default("gmail")
+  messageId String?     @map("message_id")    // Gmail message id (Message-ID header)
+  threadId  String?     @map("thread_id")     // Gmail threadId — for reply detection
+
+  // Tracking key embedded in pixel + click links. Unique so we can look up by it.
+  trackingId String     @unique @default(uuid()) @map("tracking_id")
+
+  error     String?     @db.Text
+
+  // Phase 4 hooks (nullable for now)
+  openedAt       DateTime? @map("opened_at")
+  firstClickedAt DateTime? @map("first_clicked_at")
+  repliedAt      DateTime? @map("replied_at")
+  bouncedAt      DateTime? @map("bounced_at")
+
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  lead    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@index([status])
+  @@index([threadId])
+  @@map("email_logs")
 }

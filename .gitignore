@@ -32,3 +32,7 @@ test-results
 
 # user-mode dev infra (created locally, not committed)
 .local-onspace-dev/
+
+# OAuth client secret JSONs — never commit these
+client_secret*.json
+*credentials*.json

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { use } from 'react';
+import { use, useState } from 'react';
 import { api } from '@/lib/api';
 import { LeadDetailHeader } from '@/components/leads/LeadDetailHeader';
 import { LeadOverviewCard } from '@/components/leads/LeadOverviewCard';
@@ -10,9 +10,15 @@ import { LeadSocialCard } from '@/components/leads/LeadSocialCard';
 import { LeadSourceCard } from '@/components/leads/LeadSourceCard';
 import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
 import { LeadActivityPanel } from '@/components/leads/LeadActivityPanel';
+import { LeadEmailHistory } from '@/components/leads/LeadEmailHistory';
+import { SendEmailDialog } from '@/components/leads/SendEmailDialog';
+import { Button } from '@/components/ui/Button';
+import { Mail } from 'lucide-react';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const [emailOpen, setEmailOpen] = useState(false);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['lead', id],
     queryFn: () => api.getLead(id),
@@ -37,9 +43,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     <div className="max-w-[1200px] mx-auto px-6 py-8 space-y-6">
       <LeadDetailHeader lead={data} />
 
+      {/* Primary action bar */}
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setEmailOpen(true)}>
+          <Mail size={14} /> Send email
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <LeadOverviewCard lead={data} />
+          <LeadEmailHistory leadId={id} />
           <LeadNotesPanel leadId={id} />
           <LeadActivityPanel />
         </div>
@@ -49,6 +63,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <LeadSourceCard lead={data} />
         </div>
       </div>
+
+      <SendEmailDialog
+        lead={data}
+        open={emailOpen}
+        onClose={() => setEmailOpen(false)}
+      />
     </div>
   );
 }
