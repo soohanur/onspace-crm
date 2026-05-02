@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, EmailLog, Lead, ThreadMessage } from '@/lib/api';
 import { Chip } from '../ui/Chip';
@@ -47,6 +48,12 @@ export function EmailDetailDrawer({
 }) {
   const qc = useQueryClient();
 
+  // Portal mounts only after hydration so SSR doesn't try to touch document.
+  // Without the portal, the drawer is constrained by an ancestor's stacking
+  // context (Shell's flex layout) and ends up below the topbar.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const { data: email, isLoading } = useQuery({
     queryKey: ['email', emailId],
     queryFn: () => api.getEmail(emailId!),
@@ -84,14 +91,19 @@ export function EmailDetailDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [emailId, onClose]);
 
-  if (!emailId) return null;
+  if (!emailId || !mounted) return null;
 
   const messages = email?.messages ?? [];
 
-  return (
+  const ui = (
     <>
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <aside className="fixed top-0 right-0 z-50 h-full w-full max-w-[720px] bg-surface shadow-e3 flex flex-col">
+      {/* Backdrop covers everything (full viewport, ~40% black) */}
+      <div
+        className="fixed inset-0 z-[100] bg-black/40"
+        onClick={onClose}
+      />
+      {/* Drawer pinned to top-right edge, full screen height, above topbar */}
+      <aside className="fixed top-0 right-0 z-[110] h-screen w-full max-w-[720px] bg-surface shadow-e3 flex flex-col">
         {/* Header */}
         <header className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -169,6 +181,8 @@ export function EmailDetailDrawer({
       </aside>
     </>
   );
+
+  return createPortal(ui, document.body);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

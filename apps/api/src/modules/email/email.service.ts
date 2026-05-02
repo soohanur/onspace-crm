@@ -381,6 +381,28 @@ export class EmailService {
         data: { repliedAt: new Date() },
       });
     }
+
+    // Infer "opened" from replies: if the client replied, they obviously
+    // read what we sent. Stamp openedAt on every outbound log in this
+    // thread that doesn't already have one. The exact open time is fuzzy
+    // (we only know the reply time), but matches user expectation: ticks
+    // turn green the moment a reply arrives.
+    //
+    // This also backfills historical sends that never got a pixel hit
+    // because the API was on localhost — every poll that sees replies
+    // updates them.
+    const latestReply = await this.prisma.emailReply.findFirst({
+      where: { threadId: log.threadId },
+      orderBy: { receivedAt: 'desc' },
+      select: { receivedAt: true },
+    });
+    if (latestReply) {
+      await this.prisma.emailLog.updateMany({
+        where: { threadId: log.threadId, openedAt: null },
+        data: { openedAt: latestReply.receivedAt },
+      });
+    }
+
     return { fetched: messages.length, newReplies: added };
   }
 
