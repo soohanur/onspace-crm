@@ -170,7 +170,6 @@ export function EmailDetailDrawer({
               <MessageBubble
                 key={`${m.type}:${m.id}`}
                 message={m}
-                rootLogId={email.id}
               />
             ))
           )}
@@ -191,10 +190,8 @@ export function EmailDetailDrawer({
 
 function MessageBubble({
   message,
-  rootLogId,
 }: {
   message: ThreadMessage;
-  rootLogId: string;
 }) {
   const isOutbound = message.direction === 'outbound';
   // Strip our own tracking pixel from the rendered body.
@@ -203,7 +200,6 @@ function MessageBubble({
     '',
   );
   const text = message.bodyText ?? message.snippet ?? '';
-  const isRoot = message.type === 'log' && message.id === rootLogId;
 
   return (
     <article
@@ -273,14 +269,14 @@ function MessageBubble({
             {!message.error && (
               <Ticks
                 status={message.status}
-                openedAt={isRoot ? message.openedAt ?? null : null}
+                openedAt={message.openedAt ?? null}
               />
             )}
           </div>
         )}
 
-        {/* Read indicator on the root outbound bubble */}
-        {isRoot && message.openedAt && (
+        {/* Read indicator on every opened outbound bubble (root + replies) */}
+        {isOutbound && message.openedAt && (
           <div className="mt-0.5 text-right text-caption text-success">
             Read {relativeTime(new Date(message.openedAt))}
           </div>
