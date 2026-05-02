@@ -93,6 +93,36 @@ export function EmailDetailDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [emailId, onClose]);
 
+  // Phase 16 — when the drawer opens, mark every unread email_replied
+  // notification for THIS lead as read. The user is now looking at the
+  // reply, so leaving it unread in the bell would be stale.
+  useEffect(() => {
+    if (!emailId || !lead?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await api.listNotifications({
+          status: 'unread',
+          entityType: 'lead',
+          entityId: lead.id,
+          take: 50,
+        });
+        if (cancelled) return;
+        const replies = items.filter((n) => n.kind === 'email_replied');
+        if (replies.length === 0) return;
+        await Promise.all(replies.map((n) => api.markNotificationRead(n.id)));
+        qc.invalidateQueries({ queryKey: ['notifications-list'] });
+        qc.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      } catch {
+        /* best-effort — never blocks the drawer */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailId, lead?.id]);
+
   if (!emailId || !mounted) return null;
 
   const messages = email?.messages ?? [];

@@ -7,6 +7,7 @@ import { saveAttachment, StoredAttachment } from './attachments';
 import { accountHasReadScope } from './scopes';
 import { TunnelService } from './tunnel.service';
 import { StageAutomationService } from '../leads/stage-automation.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const toJson = (v: unknown): Prisma.InputJsonValue =>
   (v ?? []) as Prisma.InputJsonValue;
@@ -45,6 +46,7 @@ export class EmailService {
     private readonly gmail: GmailService,
     private readonly tunnel: TunnelService,
     private readonly stageAutomation: StageAutomationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async send(input: SendInput) {
@@ -503,6 +505,11 @@ export class EmailService {
     const ourMessageIds = new Set(ours.map((o) => o.messageId).filter(Boolean) as string[]);
 
     let added = 0;
+    let firstNewReply: {
+      fromEmail: string;
+      fromName: string | null;
+      snippet: string | null;
+    } | null = null;
     for (const m of messages) {
       if (ourMessageIds.has(m.gmailMessageId)) continue;
       const existing = await this.prisma.emailReply.findUnique({
@@ -527,6 +534,13 @@ export class EmailService {
         },
       });
       added += 1;
+      if (firstNewReply === null) {
+        firstNewReply = {
+          fromEmail: m.fromEmail ?? '',
+          fromName: m.fromName ?? null,
+          snippet: m.snippet ?? null,
+        };
+      }
     }
 
     // Stage automation: any net-new reply on this thread promotes the lead
@@ -536,6 +550,22 @@ export class EmailService {
     }
 
     if (added > 0 && !log.repliedAt) {
+      // Notification fires ONLY on the null → set transition: i.e. the
+      // first reply this lead's thread has ever produced. Subsequent
+      // refresh ticks that find more replies don't re-notify.
+      if (firstNewReply) {
+        const who =
+          firstNewReply.fromName?.trim() ||
+          firstNewReply.fromEmail ||
+          'a contact';
+        await this.notifications.create({
+          kind: 'email_replied',
+          title: `New reply from ${who}`,
+          message: firstNewReply.snippet?.slice(0, 200) ?? null,
+          entityType: 'lead',
+          entityId: log.leadId,
+        });
+      }
       await this.prisma.emailLog.update({
         where: { id: log.id },
         data: { repliedAt: new Date() },

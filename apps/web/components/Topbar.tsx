@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, HelpCircle, Menu, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { HelpCircle, Menu, PanelLeftClose } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
+import { NotificationBell } from './notifications/NotificationBell';
 
 export function Topbar() {
   const { collapsed, toggle } = useSidebar();
@@ -24,9 +25,7 @@ export function Topbar() {
         <button className="h-9 w-9 rounded-md hover:bg-background flex items-center justify-center text-ink-muted">
           <HelpCircle size={18} />
         </button>
-        <button className="h-9 w-9 rounded-md hover:bg-background flex items-center justify-center text-ink-muted">
-          <Bell size={18} />
-        </button>
+        <NotificationBell />
         <div className="h-9 w-9 rounded-full bg-primary text-white text-bodysm font-bold flex items-center justify-center">
           OC
         </div>

@@ -778,3 +778,41 @@ model Call {
   @@index([direction, status])
   @@map("calls")
 }
+
+// ─── Phase 16: Notifications ──────────────────────────────────────────────
+
+enum NotificationKind {
+  email_replied
+  campaign_completed
+  lead_converted
+  lead_lost
+  lead_not_converted
+}
+
+enum NotificationStatus {
+  unread
+  read
+  dismissed
+}
+
+/// Phase 16 — display-layer notifications. We intentionally use a loose
+/// (entityType, entityId) pair instead of polymorphic FKs — the entity
+/// already enforces its own constraints, and a notification surviving
+/// past its target is just stale UI, not corrupt state.
+model Notification {
+  id          String              @id @default(uuid())
+  kind        NotificationKind
+  status      NotificationStatus  @default(unread)
+  title       String
+  message     String?             @db.Text
+  entityType  String?             @map("entity_type")
+  entityId    String?             @map("entity_id")
+  /// Free-form attribution until multi-tenant arrives. null = workspace-wide.
+  assignedTo  String?             @map("assigned_to")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  readAt      DateTime?           @map("read_at")
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}

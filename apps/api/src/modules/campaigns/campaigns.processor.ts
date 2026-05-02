@@ -9,6 +9,7 @@ import {
   ORPHAN_RECOVERY_MINUTES,
 } from './campaigns.constants';
 import { renderTags, MergeContext } from './merge-tags';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface TickPayload {
   campaignId: string;
@@ -32,6 +33,7 @@ export class CampaignsProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly emails: EmailService,
     @InjectQueue(CAMPAIGNS_QUEUE) private readonly queue: Queue,
+    private readonly notifications: NotificationsService,
   ) {
     super();
   }
@@ -119,6 +121,22 @@ export class CampaignsProcessor extends WorkerHost {
           data: { status: 'completed', finishedAt: new Date() },
         });
         this.log.log(`campaign ${campaignId} completed`);
+        // Tally + notify (best-effort, never bubbles).
+        const [openedCount, repliedCount] = await Promise.all([
+          this.prisma.emailLog.count({
+            where: { campaignId, openedAt: { not: null } },
+          }),
+          this.prisma.emailLog.count({
+            where: { campaignId, repliedAt: { not: null } },
+          }),
+        ]);
+        await this.notifications.create({
+          kind: 'campaign_completed',
+          title: `Campaign "${campaign.name}" completed`,
+          message: `Sent: ${campaign.sentCount} · Opens: ${openedCount} · Replies: ${repliedCount}`,
+          entityType: 'campaign',
+          entityId: campaignId,
+        });
       }
       return { stopped: true, reason: 'no-pending' };
     }

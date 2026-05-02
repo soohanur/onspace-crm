@@ -20,6 +20,7 @@ import { ProposalsModule } from './modules/proposals/proposals.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     CallsModule,
     DashboardModule,
     ReportsModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

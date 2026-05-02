@@ -737,6 +737,30 @@ export type DashboardEvent =
       subject: string;
     };
 
+// ─── Phase 16: Notifications ─────────────────────────────────────────────
+
+export type NotificationKind =
+  | 'email_replied'
+  | 'campaign_completed'
+  | 'lead_converted'
+  | 'lead_lost'
+  | 'lead_not_converted';
+
+export type NotificationStatus = 'unread' | 'read' | 'dismissed';
+
+export interface Notification {
+  id: string;
+  kind: NotificationKind;
+  status: NotificationStatus;
+  title: string;
+  message: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  assignedTo: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
 // ─── Phase 15: Reports ───────────────────────────────────────────────────
 
 export interface PipelineReport {
@@ -1421,6 +1445,42 @@ export const api = {
     ),
   getFollowupHealthReport: () =>
     request<FollowupHealthReport>('/reports/followup-health'),
+
+  // ─── Phase 16: Notifications ──────────────────────────────────────────
+  listNotifications: (
+    params: {
+      status?: NotificationStatus;
+      take?: number;
+      entityType?: string;
+      entityId?: string;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.take !== undefined) qs.set('take', String(params.take));
+    if (params.entityType) qs.set('entityType', params.entityType);
+    if (params.entityId) qs.set('entityId', params.entityId);
+    const suffix = qs.toString();
+    return request<Notification[]>(
+      `/notifications${suffix ? `?${suffix}` : ''}`,
+    );
+  },
+  getNotificationUnreadCount: () =>
+    request<{ count: number }>('/notifications/unread-count'),
+  markNotificationRead: (id: string) =>
+    request<Notification>(`/notifications/${id}/mark-read`, {
+      method: 'POST',
+    }),
+  markAllNotificationsRead: () =>
+    request<{ updated: number }>('/notifications/mark-all-read', {
+      method: 'POST',
+    }),
+  dismissNotification: (id: string) =>
+    request<Notification>(`/notifications/${id}/dismiss`, {
+      method: 'POST',
+    }),
+  deleteNotification: (id: string) =>
+    request<{ ok: true }>(`/notifications/${id}`, { method: 'DELETE' }),
 };
 
 function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {

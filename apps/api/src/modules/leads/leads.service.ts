@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/commo
 import { Prisma, LeadStage, LeadValidity } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StageAutomationService } from './stage-automation.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export type OrderBy = 'recent' | 'name' | 'rating' | 'years';
 
@@ -60,6 +61,7 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => StageAutomationService))
     private readonly stageAutomation: StageAutomationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private buildWhere(f: LeadFilter): Prisma.LeadWhereInput {
@@ -260,6 +262,24 @@ export class LeadsService {
     // Manual stage change side-effects (e.g. qualified -> auto-task).
     // Wrapped internally; never bubbles.
     await this.stageAutomation.onLeadStageChanged(id, existing.stage, stage);
+
+    // Phase 16 — terminal-stage notification. updateStage is the manual-
+    // only path (automation goes through StageAutomation.applyStageChange
+    // directly), so no extra gating needed.
+    if (stage === 'converted' || stage === 'lost' || stage === 'not_converted') {
+      const kind =
+        stage === 'converted'
+          ? 'lead_converted'
+          : stage === 'lost'
+          ? 'lead_lost'
+          : 'lead_not_converted';
+      await this.notifications.create({
+        kind,
+        title: `${updated.businessName} marked ${stage.replace('_', ' ')}`,
+        entityType: 'lead',
+        entityId: id,
+      });
+    }
 
     return updated;
   }
