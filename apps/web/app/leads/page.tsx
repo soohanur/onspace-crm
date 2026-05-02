@@ -1,7 +1,11 @@
 'use client';
 
+// useSearchParams() inside useLeadsFilter requires a Suspense boundary
+// for prerender — wrap the body and force-dynamic the route.
+export const dynamic = 'force-dynamic';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { api } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,6 +20,14 @@ import { filterToSearchParams } from '@/lib/filters';
 import { Trash2 } from 'lucide-react';
 
 export default function GlobalLeadsPage() {
+  return (
+    <Suspense fallback={<div className="max-w-[1700px] mx-auto px-6 py-8 text-ink-muted">Loading…</div>}>
+      <GlobalLeadsBody />
+    </Suspense>
+  );
+}
+
+function GlobalLeadsBody() {
   const qc = useQueryClient();
   const { filter } = useLeadsFilter();
   const { visible } = useColumnPrefs();

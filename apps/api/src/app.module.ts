@@ -9,6 +9,7 @@ import { ScrapeModule } from './modules/scrape/scrape.module';
 import { SearchesModule } from './modules/searches/searches.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { NotesModule } from './modules/notes/notes.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
 import { EmailModule } from './modules/email/email.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { EmailModule } from './modules/email/email.module';
     ScrapeModule,
     GroupsModule,
     NotesModule,
+    ContactsModule,
     EmailModule,
   ],
   controllers: [HealthController],

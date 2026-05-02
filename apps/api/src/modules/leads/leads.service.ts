@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@onspace/db';
+import { Prisma, LeadStage, LeadValidity } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type OrderBy = 'recent' | 'name' | 'rating' | 'years';
@@ -40,6 +40,12 @@ export interface LeadFilter {
   ratingMax?: number;
   yearsMin?: number;
   yearsMax?: number;
+
+  // Phase 5: pipeline filters
+  stage?: LeadStage[];
+  validity?: LeadValidity;
+  scoreMin?: number;
+  scoreMax?: number;
 
   // pagination + sort
   orderBy?: OrderBy;
@@ -90,6 +96,19 @@ export class LeadsService {
       where.yearsInBusiness = {
         ...(f.yearsMin !== undefined ? { gte: f.yearsMin } : {}),
         ...(f.yearsMax !== undefined ? { lte: f.yearsMax } : {}),
+      };
+    }
+
+    if (f.stage && f.stage.length > 0) {
+      where.stage = { in: f.stage };
+    }
+    if (f.validity !== undefined) {
+      where.validity = f.validity;
+    }
+    if (f.scoreMin !== undefined || f.scoreMax !== undefined) {
+      where.score = {
+        ...(f.scoreMin !== undefined ? { gte: f.scoreMin } : {}),
+        ...(f.scoreMax !== undefined ? { lte: f.scoreMax } : {}),
       };
     }
 
@@ -168,10 +187,36 @@ export class LeadsService {
         groupMemberships: {
           include: { group: true },
         },
+        contacts: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+        },
       },
     });
     if (!lead) throw new NotFoundException('Lead not found');
     return lead;
+  }
+
+  async updateStage(id: string, stage: LeadStage) {
+    await this.assertExists(id);
+    return this.prisma.lead.update({ where: { id }, data: { stage } });
+  }
+
+  async updateScore(id: string, score: number) {
+    await this.assertExists(id);
+    return this.prisma.lead.update({ where: { id }, data: { score } });
+  }
+
+  async updateValidity(id: string, validity: LeadValidity) {
+    await this.assertExists(id);
+    return this.prisma.lead.update({ where: { id }, data: { validity } });
+  }
+
+  private async assertExists(id: string) {
+    const exists = await this.prisma.lead.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Lead not found');
   }
 
   async stats(filter: Pick<LeadFilter, 'jobId' | 'searchQuery' | 'searchLocation' | 'groupId'>) {

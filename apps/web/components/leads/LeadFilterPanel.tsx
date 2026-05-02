@@ -2,12 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import clsx from 'clsx';
+import { api, LeadStage } from '@/lib/api';
 import { LeadFilter, activeFilterCount } from '@/lib/filters';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
+import { LEAD_STAGES, stageClass, stageLabel } from '@/lib/stages';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
-import { Filter, X, Search as SearchIcon, ChevronDown } from 'lucide-react';
+import { Filter, X, Search as SearchIcon, ChevronDown, Check } from 'lucide-react';
 
 /**
  * Compact, no-overflow filter sidebar.
@@ -82,6 +84,38 @@ export function LeadFilterPanel() {
             />
           </Field>
         </div>
+
+        <Field label="Stage">
+          <StageMultiSelect
+            value={filter.stage ?? []}
+            onChange={(next) => set('stage', next.length ? next : undefined)}
+          />
+        </Field>
+
+        <Field label="Validity">
+          <div className="flex border border-border rounded-md overflow-hidden text-caption">
+            {(
+              [
+                { v: undefined, label: 'All' },
+                { v: 'valid', label: 'Valid' },
+                { v: 'invalid', label: 'Invalid' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => set('validity', opt.v)}
+                className={
+                  'flex-1 px-2.5 h-8 transition-colors ' +
+                  (filter.validity === opt.v
+                    ? 'bg-primary text-white font-medium'
+                    : 'bg-surface text-ink-muted hover:bg-background')
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Field>
 
         <Field label="Has">
           <div className="space-y-1.5">
@@ -209,6 +243,127 @@ function Triple({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Stage chooser — same typeahead-style dropdown pattern as Category, but
+ * selects multiple values. Selected stages render as removable chips and
+ * the dropdown filters by typed input.
+ */
+function StageMultiSelect({
+  value,
+  onChange,
+}: {
+  value: LeadStage[];
+  onChange: (next: LeadStage[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const selected = new Set(value);
+  const matches = LEAD_STAGES.filter((s) =>
+    draft.length === 0
+      ? true
+      : stageLabel(s).toLowerCase().includes(draft.toLowerCase()) ||
+        s.includes(draft.toLowerCase()),
+  );
+
+  const toggle = (s: LeadStage) => {
+    if (selected.has(s)) onChange(value.filter((x) => x !== s));
+    else onChange([...value, s]);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div
+        onClick={() => setOpen(true)}
+        className="min-h-[36px] w-full px-2 py-1 rounded-md border border-border bg-surface flex items-center gap-1 flex-wrap cursor-text focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition"
+      >
+        {value.map((s) => (
+          <span
+            key={s}
+            className={clsx(
+              'inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] font-medium border',
+              stageClass(s),
+            )}
+          >
+            {stageLabel(s)}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(s);
+              }}
+              className="opacity-70 hover:opacity-100"
+              aria-label={`Remove ${stageLabel(s)}`}
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder={value.length ? '' : 'Any stage'}
+          className="flex-1 min-w-[80px] h-7 bg-transparent text-bodysm focus:outline-none placeholder:text-neutral"
+        />
+        <ChevronDown
+          size={12}
+          className="text-neutral pointer-events-none ml-auto"
+        />
+      </div>
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 mt-1 bg-surface border border-border rounded-md shadow-e2 z-30 overflow-hidden max-h-[280px] overflow-y-auto scroll-thin">
+          {matches.map((s) => {
+            const checked = selected.has(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  toggle(s);
+                  setDraft('');
+                }}
+                className="w-full flex items-center gap-2 px-3 h-8 text-bodysm hover:bg-background"
+              >
+                <span
+                  className={clsx(
+                    'inline-flex items-center justify-center h-3.5 w-3.5 rounded border',
+                    checked
+                      ? 'bg-primary border-primary text-white'
+                      : 'border-border bg-surface',
+                  )}
+                  aria-hidden
+                >
+                  {checked && <Check size={10} />}
+                </span>
+                <span
+                  className={clsx(
+                    'inline-block h-2 w-2 rounded-full border',
+                    stageClass(s),
+                  )}
+                />
+                <span>{stageLabel(s)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

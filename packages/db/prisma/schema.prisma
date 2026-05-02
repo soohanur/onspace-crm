@@ -32,6 +32,62 @@ enum EmailStatus {
   failed
 }
 
+// ─── Phase 5: Contacts + Lead pipeline state ─────────────────────────────
+
+enum ContactType {
+  owner
+  manager
+  staff
+  general
+}
+
+enum ContactSource {
+  manual
+  website
+  directory
+  enrichment
+}
+
+enum Confidence {
+  low
+  medium
+  high
+}
+
+enum ContactStatus {
+  unverified
+  verified
+  invalid
+}
+
+enum LeadStage {
+  new
+  approached
+  no_response
+  engaged
+  push
+  qualified
+  interested
+  booked
+  proposal_sent
+  converted
+  not_converted
+  lost
+}
+
+enum LeadValidity {
+  valid
+  invalid
+}
+
+enum FollowUpStatus {
+  none
+  needed
+  scheduled
+  completed
+  overdue
+}
+
 model ScrapeJob {
   id             String          @id @default(uuid())
   source         String          @default("yellowpages")
@@ -106,12 +162,21 @@ model Lead {
   // Frontend classifies platform from the URL host at render time.
   socials        String[] @default([])
 
-  // Owner enrichment (best-effort)
+  // Owner enrichment (best-effort) — legacy; the scraper still writes here
+  // and the lead detail still surfaces it. Phase 5 introduces the
+  // structured `contacts` table; these stay until every reader migrates.
   ownerName      String?  @map("owner_name")
   ownerEmail     String?  @map("owner_email")
   ownerPhone     String?  @map("owner_phone")
   ownerLinkedin  String?  @map("owner_linkedin")
   ownerSearchUrl String?  @map("owner_search_url")  // pre-built Google query for owner discovery
+
+  // Phase 5 — pipeline state. Defaults make every existing row a sensible
+  // "new / valid / score=0" record without backfill.
+  stage          LeadStage      @default(new)
+  score          Int            @default(0)
+  validity       LeadValidity   @default(valid)
+  followUpStatus FollowUpStatus @default(none) @map("follow_up_status")
 
   // Dedup hash: sha1(lower(business_name) + normalize(phone) + normalize(address))
   dedupHash      String?  @map("dedup_hash")
@@ -126,6 +191,7 @@ model Lead {
   groupMemberships LeadGroupMember[]
   notes            Note[]
   emailLogs        EmailLog[]
+  contacts         Contact[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
@@ -134,7 +200,40 @@ model Lead {
   @@index([createdAt])
   @@index([rating])
   @@index([yearsInBusiness])
+  @@index([stage])
+  @@index([validity])
   @@map("leads")
+}
+
+// ─── Phase 5: Contacts ───────────────────────────────────────────────────
+//
+// Multiple structured contacts per lead. The legacy `owner_*` columns on
+// leads are migrated into a single primary `owner`-type contact at
+// migration time (see migration SQL) and stay populated by the scraper
+// until a later phase removes them.
+
+model Contact {
+  id            String        @id @default(uuid())
+  leadId        String        @map("lead_id")
+  name          String
+  contactType   ContactType   @default(general)    @map("contact_type")
+  email         String?
+  phone         String?
+  linkedin      String?
+  socialProfile String?       @map("social_profile")
+  source        ContactSource @default(manual)
+  confidence    Confidence    @default(low)
+  status        ContactStatus @default(unverified)
+  isPrimary     Boolean       @default(false)      @map("is_primary")
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())      @map("created_at")
+  updatedAt     DateTime      @updatedAt           @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([leadId, isPrimary])
+  @@map("contacts")
 }
 
 model LeadGroup {

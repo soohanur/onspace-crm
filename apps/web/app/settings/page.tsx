@@ -1,6 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+// useSearchParams() forces this page out of static prerender. Next.js 15
+// requires either a Suspense boundary OR the dynamic export. Both belt
+// and braces here so prerender + suspense fallback both work cleanly.
+export const dynamic = 'force-dynamic';
+
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -17,6 +22,14 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="max-w-[900px] mx-auto px-6 py-8 text-ink-muted">Loading…</div>}>
+      <SettingsPageBody />
+    </Suspense>
+  );
+}
+
+function SettingsPageBody() {
   const qc = useQueryClient();
   const sp = useSearchParams();
   const router = useRouter();

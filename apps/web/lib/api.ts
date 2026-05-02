@@ -30,6 +30,64 @@ export interface ScrapeJob {
   createdAt: string;
 }
 
+// ─── Phase 5: Contacts + Lead pipeline state ─────────────────────────────
+
+export type ContactType = 'owner' | 'manager' | 'staff' | 'general';
+export type ContactSource = 'manual' | 'website' | 'directory' | 'enrichment';
+export type Confidence = 'low' | 'medium' | 'high';
+export type ContactStatus = 'unverified' | 'verified' | 'invalid';
+
+export type LeadStage =
+  | 'new'
+  | 'approached'
+  | 'no_response'
+  | 'engaged'
+  | 'push'
+  | 'qualified'
+  | 'interested'
+  | 'booked'
+  | 'proposal_sent'
+  | 'converted'
+  | 'not_converted'
+  | 'lost';
+
+export type LeadValidity = 'valid' | 'invalid';
+export type FollowUpStatus = 'none' | 'needed' | 'scheduled' | 'completed' | 'overdue';
+
+export interface Contact {
+  id: string;
+  leadId: string;
+  name: string;
+  contactType: ContactType;
+  email: string | null;
+  phone: string | null;
+  linkedin: string | null;
+  socialProfile: string | null;
+  source: ContactSource;
+  confidence: Confidence;
+  status: ContactStatus;
+  isPrimary: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateContactInput {
+  name: string;
+  contactType?: ContactType;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+  socialProfile?: string;
+  source?: ContactSource;
+  confidence?: Confidence;
+  status?: ContactStatus;
+  isPrimary?: boolean;
+  notes?: string;
+}
+
+export type UpdateContactInput = Partial<CreateContactInput>;
+
 export interface Lead {
   id: string;
   jobId: string | null;
@@ -75,6 +133,13 @@ export interface Lead {
   ownerPhone: string | null;
   ownerLinkedin: string | null;
   ownerSearchUrl: string | null;
+  // Phase 5 pipeline state
+  stage: LeadStage;
+  score: number;
+  validity: LeadValidity;
+  followUpStatus: FollowUpStatus;
+  /** Present in findOne responses (lead detail) — empty in list responses. */
+  contacts?: Contact[];
   createdAt: string;
 }
 
@@ -278,6 +343,41 @@ export const api = {
     }),
 
   facets: () => request<LeadFacets>('/leads/facets'),
+
+  // pipeline state
+  updateLeadStage: (id: string, stage: LeadStage) =>
+    request<Lead>(`/leads/${id}/stage`, {
+      method: 'PATCH',
+      body: JSON.stringify({ stage }),
+    }),
+  updateLeadScore: (id: string, score: number) =>
+    request<Lead>(`/leads/${id}/score`, {
+      method: 'PATCH',
+      body: JSON.stringify({ score }),
+    }),
+  updateLeadValidity: (id: string, validity: LeadValidity) =>
+    request<Lead>(`/leads/${id}/validity`, {
+      method: 'PATCH',
+      body: JSON.stringify({ validity }),
+    }),
+
+  // contacts
+  listContacts: (leadId: string) =>
+    request<Contact[]>(`/leads/${leadId}/contacts`),
+  createContact: (leadId: string, input: CreateContactInput) =>
+    request<Contact>(`/leads/${leadId}/contacts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateContact: (id: string, patch: UpdateContactInput) =>
+    request<Contact>(`/contacts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteContact: (id: string) =>
+    request<{ ok: true }>(`/contacts/${id}`, { method: 'DELETE' }),
+  setPrimaryContact: (id: string) =>
+    request<Contact>(`/contacts/${id}/set-primary`, { method: 'POST' }),
 
   // notes
   listNotes: (leadId: string) => request<Note[]>(`/leads/${leadId}/notes`),

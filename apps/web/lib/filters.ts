@@ -1,6 +1,8 @@
 /** Shape of the Global Leads filter — mirrors backend LeadFilter. */
 export type LeadOrderBy = 'recent' | 'name' | 'rating' | 'years';
 
+import type { LeadStage, LeadValidity } from './api';
+
 export interface LeadFilter {
   q?: string;
   category?: string;
@@ -15,6 +17,11 @@ export interface LeadFilter {
   ratingMax?: number;
   yearsMin?: number;
   yearsMax?: number;
+  /** Multi-select: a comma-joined list of stage values in the URL. */
+  stage?: LeadStage[];
+  validity?: LeadValidity;
+  scoreMin?: number;
+  scoreMax?: number;
   groupId?: string;
   orderBy?: LeadOrderBy;
 }
@@ -24,6 +31,11 @@ export function filterToSearchParams(f: LeadFilter): URLSearchParams {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) {
     if (v === undefined || v === '' || v === null) continue;
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      qs.set(k, v.join(','));
+      continue;
+    }
     qs.set(k, String(v));
   }
   return qs;
@@ -56,6 +68,18 @@ export function searchParamsToFilter(sp: URLSearchParams): LeadFilter {
   f.ratingMax = num('ratingMax');
   f.yearsMin = num('yearsMin');
   f.yearsMax = num('yearsMax');
+  const stageRaw = sp.get('stage');
+  if (stageRaw) {
+    const parts = stageRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) as LeadStage[];
+    if (parts.length) f.stage = parts;
+  }
+  const v = sp.get('validity');
+  if (v === 'valid' || v === 'invalid') f.validity = v;
+  f.scoreMin = num('scoreMin');
+  f.scoreMax = num('scoreMax');
   f.groupId = get('groupId');
   const ob = get('orderBy');
   if (ob === 'recent' || ob === 'name' || ob === 'rating' || ob === 'years') f.orderBy = ob;
@@ -64,6 +88,10 @@ export function searchParamsToFilter(sp: URLSearchParams): LeadFilter {
 
 /** True if any filter is set (for "Clear all" affordance + count). */
 export function activeFilterCount(f: LeadFilter): number {
-  return Object.entries(f).filter(([k, v]) => k !== 'orderBy' && v !== undefined && v !== '')
-    .length;
+  return Object.entries(f).filter(([k, v]) => {
+    if (k === 'orderBy') return false;
+    if (v === undefined || v === '' || v === null) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return true;
+  }).length;
 }

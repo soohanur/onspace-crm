@@ -4,6 +4,7 @@ import { Lead } from '@/lib/api';
 import { Chip } from '../ui/Chip';
 import { CheckCircle2, ImageIcon, Star, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { LeadPipelineControls } from './LeadPipelineControls';
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
   return (
@@ -67,6 +68,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           </div>
         </div>
       </div>
+      <LeadPipelineControls lead={lead} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Lead } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
 import { ColumnKey } from '@/hooks/useColumnPrefs';
 import { Chip } from './ui/Chip';
+import { StageBadge } from './leads/StageBadge';
 import {
   ExternalLink,
   Globe,
@@ -88,6 +89,8 @@ export function LeadsTable({
               </Th>
             )}
             {isVisible('business') && <Th>Business</Th>}
+            {isVisible('stage') && <Th>Stage</Th>}
+            {isVisible('score') && <Th className="text-right">Score</Th>}
             {isVisible('categories') && <Th>Categories</Th>}
             {isVisible('phone') && <Th>Phone</Th>}
             {isVisible('email') && <Th>Email</Th>}
@@ -155,6 +158,14 @@ export function LeadsTable({
                       </div>
                     )}
                   </div>
+                </div>
+              </Td>}
+              {isVisible('stage') && <Td>
+                <StageBadge stage={l.stage} />
+              </Td>}
+              {isVisible('score') && <Td>
+                <div className="text-right font-mono font-tabular tabular-nums">
+                  {l.score}
                 </div>
               </Td>}
               {isVisible('categories') && <Td>
@@ -392,8 +403,22 @@ export function LeadsTable({
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-3.5 font-medium whitespace-nowrap">{children}</th>;
+function Th({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <th
+      className={
+        'px-4 py-3.5 font-medium whitespace-nowrap ' + (className ?? '')
+      }
+    >
+      {children}
+    </th>
+  );
 }
 
 function Td({ children }: { children: React.ReactNode }) {
