@@ -1,23 +1,28 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { LeadFilter, activeFilterCount } from '@/lib/filters';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
-import { Select } from '../ui/Select';
-import { Filter, X } from 'lucide-react';
+import { Filter, X, Search as SearchIcon, ChevronDown } from 'lucide-react';
 
+/**
+ * Compact, no-overflow filter sidebar.
+ *  - Category / city / state are typeaheads (handle hundreds of options)
+ *  - All sources are scoped to leads we've actually scraped (/api/leads/facets)
+ *  - Numeric ranges collapse onto a single row
+ */
 export function LeadFilterPanel() {
   const { filter, set, clear } = useLeadsFilter();
   const { data: facets } = useQuery({ queryKey: ['facets'], queryFn: api.facets });
-
   const count = activeFilterCount(filter);
 
   return (
     <Card className="!p-4 sticky top-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="text-caption uppercase tracking-wider text-neutral inline-flex items-center gap-1.5">
           <Filter size={12} /> Filters
           {count > 0 && (
@@ -34,93 +39,62 @@ export function LeadFilterPanel() {
         )}
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <Label>Search</Label>
-          <Input
-            placeholder="Business, category, city…"
-            value={filter.q ?? ''}
-            onChange={(e) => set('q', e.target.value || undefined)}
-          />
-        </div>
+      <div className="space-y-3">
+        <Field label="Search">
+          <div className="relative">
+            <SearchIcon
+              size={13}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral pointer-events-none"
+            />
+            <Input
+              placeholder="Business, city…"
+              value={filter.q ?? ''}
+              onChange={(e) => set('q', e.target.value || undefined)}
+              className="!pl-9"
+            />
+          </div>
+        </Field>
 
-        <div>
-          <Label>Category</Label>
-          <Select
+        <Field label="Category">
+          <Typeahead
             value={filter.category ?? ''}
-            onChange={(e) => set('category', e.target.value || undefined)}
-          >
-            <option value="">All categories</option>
-            {facets?.categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </div>
+            onChange={(v) => set('category', v || undefined)}
+            options={facets?.categories ?? []}
+            placeholder="Any category"
+          />
+        </Field>
 
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label>City</Label>
-            <Select
+          <Field label="City">
+            <Typeahead
               value={filter.city ?? ''}
-              onChange={(e) => set('city', e.target.value || undefined)}
-            >
-              <option value="">All</option>
-              {facets?.cities.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>State</Label>
-            <Select
+              onChange={(v) => set('city', v || undefined)}
+              options={facets?.cities ?? []}
+              placeholder="Any"
+            />
+          </Field>
+          <Field label="State">
+            <Typeahead
               value={filter.state ?? ''}
-              onChange={(e) => set('state', e.target.value || undefined)}
-            >
-              <option value="">All</option>
-              {facets?.states.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </Select>
-          </div>
+              onChange={(v) => set('state', v || undefined)}
+              options={facets?.states ?? []}
+              placeholder="Any"
+            />
+          </Field>
         </div>
 
-        <FieldGroup label="Has">
-          <Triple
-            label="Website"
-            value={filter.hasWebsite}
-            onChange={(v) => set('hasWebsite', v)}
-          />
-          <Triple
-            label="Email"
-            value={filter.hasEmail}
-            onChange={(v) => set('hasEmail', v)}
-          />
-          <Triple
-            label="Phone"
-            value={filter.hasPhone}
-            onChange={(v) => set('hasPhone', v)}
-          />
-          <Triple
-            label="Social"
-            value={filter.hasSocials}
-            onChange={(v) => set('hasSocials', v)}
-          />
-          <Triple
-            label="Claimed"
-            value={filter.claimed}
-            onChange={(v) => set('claimed', v)}
-          />
-        </FieldGroup>
+        <Field label="Has">
+          <div className="space-y-1.5">
+            <Triple label="Website" value={filter.hasWebsite} onChange={(v) => set('hasWebsite', v)} />
+            <Triple label="Email" value={filter.hasEmail} onChange={(v) => set('hasEmail', v)} />
+            <Triple label="Phone" value={filter.hasPhone} onChange={(v) => set('hasPhone', v)} />
+            <Triple label="Social" value={filter.hasSocials} onChange={(v) => set('hasSocials', v)} />
+            <Triple label="Claimed" value={filter.claimed} onChange={(v) => set('claimed', v)} />
+          </div>
+        </Field>
 
-        <div>
-          <Label>Rating range</Label>
-          <div className="grid grid-cols-2 gap-2">
+        <Field label="Rating (0–5)">
+          <div className="flex items-center gap-1.5">
             <Input
               type="number"
               placeholder="min"
@@ -131,7 +105,9 @@ export function LeadFilterPanel() {
               onChange={(e) =>
                 set('ratingMin', e.target.value ? Number(e.target.value) : undefined)
               }
+              className="!h-9 !text-bodysm !px-2"
             />
+            <span className="text-neutral text-caption">to</span>
             <Input
               type="number"
               placeholder="max"
@@ -142,13 +118,13 @@ export function LeadFilterPanel() {
               onChange={(e) =>
                 set('ratingMax', e.target.value ? Number(e.target.value) : undefined)
               }
+              className="!h-9 !text-bodysm !px-2"
             />
           </div>
-        </div>
+        </Field>
 
-        <div>
-          <Label>Years in business</Label>
-          <div className="grid grid-cols-2 gap-2">
+        <Field label="Years in business">
+          <div className="flex items-center gap-1.5">
             <Input
               type="number"
               placeholder="min"
@@ -157,7 +133,9 @@ export function LeadFilterPanel() {
               onChange={(e) =>
                 set('yearsMin', e.target.value ? Number(e.target.value) : undefined)
               }
+              className="!h-9 !text-bodysm !px-2"
             />
+            <span className="text-neutral text-caption">to</span>
             <Input
               type="number"
               placeholder="max"
@@ -166,44 +144,33 @@ export function LeadFilterPanel() {
               onChange={(e) =>
                 set('yearsMax', e.target.value ? Number(e.target.value) : undefined)
               }
+              className="!h-9 !text-bodysm !px-2"
             />
           </div>
-        </div>
+        </Field>
 
-        <div>
-          <Label>Sort by</Label>
-          <Select
+        <Field label="Sort by">
+          <select
             value={filter.orderBy ?? 'recent'}
             onChange={(e) => set('orderBy', e.target.value as LeadFilter['orderBy'])}
+            className="h-9 px-2 w-full rounded-md border border-border bg-surface text-bodysm text-ink focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition"
           >
             <option value="recent">Most recent</option>
             <option value="name">Name (A→Z)</option>
             <option value="rating">Rating (high→low)</option>
             <option value="years">Years (high→low)</option>
-          </Select>
-        </div>
+          </select>
+        </Field>
       </div>
     </Card>
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-caption uppercase tracking-wider text-neutral mb-1">{children}</div>
-  );
-}
-
-function FieldGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <Label>{label}</Label>
-      <div className="space-y-1.5">{children}</div>
+      <div className="text-caption uppercase tracking-wider text-neutral mb-1">{label}</div>
+      {children}
     </div>
   );
 }
@@ -218,9 +185,9 @@ function Triple({
   onChange: (v: 'true' | 'false' | undefined) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-bodysm">{label}</span>
-      <div className="flex border border-border rounded-md overflow-hidden text-caption">
+    <div className="flex items-center justify-between gap-2 text-bodysm">
+      <span className="text-ink truncate">{label}</span>
+      <div className="flex border border-border rounded-md overflow-hidden text-caption shrink-0">
         {(
           [
             { v: undefined, label: 'Any' },
@@ -232,9 +199,9 @@ function Triple({
             key={opt.label}
             onClick={() => onChange(opt.v)}
             className={
-              'px-2 h-6 transition-colors ' +
+              'px-2.5 h-6 transition-colors ' +
               (value === opt.v
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-white font-medium'
                 : 'bg-surface text-ink-muted hover:bg-background')
             }
           >
@@ -242,6 +209,103 @@ function Triple({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Filterable typeahead. Works with hundreds of options without overflowing
+ * because the dropdown panel has a max-height and only shows the top matches.
+ */
+function Typeahead({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setDraft(value), [value]);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const matches =
+    draft.length === 0
+      ? options.slice(0, 8)
+      : options.filter((o) => o.toLowerCase().includes(draft.toLowerCase())).slice(0, 8);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="relative">
+        <input
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setOpen(true);
+            if (e.target.value === '') onChange('');
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matches.length > 0) {
+              onChange(matches[0]);
+              setOpen(false);
+            }
+            if (e.key === 'Escape') setOpen(false);
+          }}
+          placeholder={placeholder}
+          className="h-9 w-full pl-2.5 pr-7 rounded-md border border-border bg-surface text-bodysm text-ink placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition truncate"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft('');
+              onChange('');
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral hover:text-error"
+            aria-label="Clear"
+          >
+            <X size={12} />
+          </button>
+        ) : (
+          <ChevronDown
+            size={12}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral pointer-events-none"
+          />
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 mt-1 bg-surface border border-border rounded-md shadow-e2 z-30 overflow-hidden max-h-[280px] overflow-y-auto scroll-thin">
+          {matches.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => {
+                setDraft(opt);
+                onChange(opt);
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 h-8 text-bodysm hover:bg-background truncate"
+              title={opt}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

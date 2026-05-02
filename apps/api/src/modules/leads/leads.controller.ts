@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { LeadsService, LeadFilter, OrderBy } from './leads.service';
 
 @Controller('leads')
@@ -23,6 +23,16 @@ export class LeadsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.leads.findOne(id);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    return this.leads.remove(id);
+  }
+
+  @Post('bulk-delete')
+  async bulkDelete(@Body() body: { ids: string[] }) {
+    return this.leads.removeMany(body?.ids ?? []);
   }
 
   /** Centralized parser so /leads + /leads/stats + smart-group resolution share it. */

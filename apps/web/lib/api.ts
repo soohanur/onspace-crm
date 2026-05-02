@@ -165,6 +165,13 @@ export const api = {
 
   // ─── Phase 2 ───
   getLead: (id: string) => request<Lead>(`/leads/${id}`),
+  deleteLead: (id: string) =>
+    request<{ ok: true }>(`/leads/${id}`, { method: 'DELETE' }),
+  bulkDeleteLeads: (ids: string[]) =>
+    request<{ deleted: number }>(`/leads/bulk-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
 
   facets: () => request<LeadFacets>('/leads/facets'),
 

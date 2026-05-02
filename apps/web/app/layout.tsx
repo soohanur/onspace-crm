@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Shell } from '@/components/Shell';
 import { QueryProvider } from '@/components/QueryProvider';
+import { SidebarProvider } from '@/components/SidebarContext';
 
 export const metadata: Metadata = {
   title: 'OnspaceCRM',
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         suppressHydrationWarning
       >
         <QueryProvider>
-          <Shell>{children}</Shell>
+          <SidebarProvider>
+            <Shell>{children}</Shell>
+          </SidebarProvider>
         </QueryProvider>
       </body>
     </html>

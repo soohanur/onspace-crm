@@ -147,6 +147,19 @@ export class LeadsService {
     };
   }
 
+  async remove(id: string) {
+    const lead = await this.prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new NotFoundException('Lead not found');
+    await this.prisma.lead.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  async removeMany(ids: string[]) {
+    if (!ids.length) return { deleted: 0 };
+    const r = await this.prisma.lead.deleteMany({ where: { id: { in: ids } } });
+    return { deleted: r.count };
+  }
+
   async findOne(id: string) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },

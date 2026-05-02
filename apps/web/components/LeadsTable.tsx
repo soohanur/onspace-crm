@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   FileText,
+  Trash2,
 } from 'lucide-react';
 
 /** Returns a Set of lead IDs added since the last render — used to highlight new rows. */
@@ -48,6 +49,7 @@ export function LeadsTable({
   selectedIds,
   onToggleSelect,
   onToggleAll,
+  onDelete,
 }: {
   leads: Lead[];
   visibleColumns?: Set<ColumnKey>;
@@ -55,6 +57,8 @@ export function LeadsTable({
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleAll?: () => void;
+  /** Called with the lead's id when the user confirms the row's delete action. */
+  onDelete?: (id: string) => void;
 }) {
   const newIds = useNewIds(leads);
   const isVisible = (k: ColumnKey) => !visibleColumns || visibleColumns.has(k);
@@ -95,6 +99,7 @@ export function LeadsTable({
             {isVisible('owner') && <Th>Owner</Th>}
             {isVisible('yp') && <Th>YP Listing</Th>}
             {isVisible('search') && <Th>Search</Th>}
+            {onDelete && <Th>{''}</Th>}
           </tr>
         </thead>
         <tbody>
@@ -102,7 +107,7 @@ export function LeadsTable({
             <tr
               key={l.id}
               className={
-                'border-t border-border hover:bg-background transition-colors ' +
+                'group border-t border-border hover:bg-background transition-colors ' +
                 (newIds.has(l.id) ? 'animate-row-flash' : '')
               }
             >
@@ -365,6 +370,20 @@ export function LeadsTable({
                   <div className="text-neutral mt-0.5">{relativeTime(l.createdAt)}</div>
                 </div>
               </Td>}
+              {onDelete && (
+                <Td>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete "${l.businessName}"?`)) onDelete(l.id);
+                    }}
+                    className="text-neutral hover:text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Delete lead"
+                    title="Delete lead"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </Td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -374,11 +393,11 @@ export function LeadsTable({
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-3 font-medium whitespace-nowrap">{children}</th>;
+  return <th className="px-4 py-3.5 font-medium whitespace-nowrap">{children}</th>;
 }
 
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-3 align-top">{children}</td>;
+  return <td className="px-4 py-4 align-top">{children}</td>;
 }
 
 function Dash() {

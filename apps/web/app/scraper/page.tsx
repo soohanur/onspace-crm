@@ -40,9 +40,19 @@ export default function LeadScraperPage() {
       }),
     onSuccess: (job) => {
       setActiveJobId(job.id);
+      // Drop any cached leads from the previous job so the table starts empty.
+      qc.removeQueries({ queryKey: ['leads-by-job'] });
       qc.invalidateQueries({ queryKey: ['scrape-jobs'] });
     },
   });
+
+  const clearActiveJob = () => {
+    setActiveJobId(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('onspace.activeJobId');
+    }
+    qc.removeQueries({ queryKey: ['leads-by-job'] });
+  };
 
   const cancelJob = useMutation({
     mutationFn: (id: string) => api.cancelScrapeJob(id),
@@ -202,6 +212,34 @@ export default function LeadScraperPage() {
         <Stat label="With Website" value={stats?.withWebsite ?? 0} />
         <Stat label="With Email" value={stats?.withEmail ?? 0} />
       </div>
+
+      {/* Finished-job banner — lets the user dismiss the previous job */}
+      {!isLive && job && (
+        <Card className="!py-3 flex items-center gap-3">
+          <Chip
+            tone={
+              job.status === 'done'
+                ? 'positive'
+                : job.status === 'failed'
+                ? 'negative'
+                : 'neutral'
+            }
+          >
+            {job.status}
+          </Chip>
+          <div className="text-bodysm">
+            Showing <span className="font-medium text-ink">{job.searchQuery}</span> in{' '}
+            <span className="font-medium text-ink">{job.searchLocation}</span>
+            {' '}— {stats?.total ?? 0} leads saved
+          </div>
+          <button
+            onClick={clearActiveJob}
+            className="ml-auto text-caption text-ink-muted hover:text-error"
+          >
+            Clear & start fresh
+          </button>
+        </Card>
+      )}
 
       {/* Live activity strip */}
       {isLive && (
