@@ -51,7 +51,7 @@ export class EmailAccountsController {
       trackingReachable: tunnel.isReachable,
       tunnel,
       successRedirect:
-        process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? 'http://localhost:3000/settings',
+        process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? `${(process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0].trim()}/settings`,
     };
   }
 
@@ -70,7 +70,7 @@ export class EmailAccountsController {
     @Query('error') error: string | undefined,
     @Res() res: Response,
   ) {
-    const success = process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? 'http://localhost:3000/settings';
+    const success = process.env.EMAIL_OAUTH_SUCCESS_REDIRECT ?? `${(process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0].trim()}/settings`;
 
     if (error) {
       return res.redirect(`${success}?email_oauth=error&reason=${encodeURIComponent(error)}`);

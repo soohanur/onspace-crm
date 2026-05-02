@@ -294,20 +294,66 @@ export class EmailService {
   }
 
   /**
-   * Set openedAt on first pixel hit. Idempotent — later opens don't update.
-   * Returns the email log id even if not found, so the controller can serve
-   * the GIF regardless.
+   * Record a tracking-pixel hit. Logs every hit individually so we can see
+   * exactly who is opening (Gmail's proxy / recipient's browser / etc.)
+   * and defend against pre-fetch false positives.
+   *
+   * Defense rule: a hit within `prefetchWindowSeconds` of sentAt is flagged
+   * `suspectedPrefetch=true` and we DON'T set `openedAt` on it. We do still
+   * log the hit so the user can see it. The next non-prefetch hit promotes
+   * the email to "opened".
    */
-  async recordOpen(trackingId: string): Promise<void> {
+  async recordOpen(trackingId: string, meta: { userAgent?: string; ipAddress?: string }): Promise<void> {
     const log = await this.prisma.emailLog.findUnique({
       where: { trackingId },
-      select: { id: true, openedAt: true },
+      select: { id: true, openedAt: true, sentAt: true, createdAt: true },
     });
-    if (!log || log.openedAt) return;
-    await this.prisma.emailLog.update({
-      where: { id: log.id },
-      data: { openedAt: new Date() },
+    if (!log) return;
+
+    const now = new Date();
+    const sent = log.sentAt ?? log.createdAt;
+    const ageSeconds = (now.getTime() - sent.getTime()) / 1000;
+
+    // Hits within this many seconds of send are presumed to be the SENDER's
+    // own Gmail tab rendering the new outbound message (which also fetches
+    // images via GoogleImageProxy), not the recipient opening it. Empirical
+    // observation: a fresh recipient open is almost never < 5 s after send,
+    // and Gmail does NOT blindly prefetch on delivery (verified by sending
+    // an unopened control email and seeing 0 hits). For thread replies the
+    // proxy often only fetches once (caching), so the window must be tight
+    // enough to count that single legitimate hit. Default 5 s.
+    // NOTE: Gmail ALWAYS fetches images via GoogleImageProxy / ggpht.com —
+    // including for legitimate opens — so UA matching cannot distinguish
+    // prefetch from real opens. Time is the only reliable signal.
+    const prefetchWindowSeconds = Number(process.env.EMAIL_PREFETCH_WINDOW_SECONDS ?? 5);
+    const suspect = ageSeconds < prefetchWindowSeconds;
+
+    // Always log the hit, even if suspect.
+    await this.prisma.emailPixelHit.create({
+      data: {
+        emailLogId: log.id,
+        trackingId,
+        userAgent: meta.userAgent ?? null,
+        ipAddress: meta.ipAddress ?? null,
+        suspectedPrefetch: suspect,
+      },
     });
+
+    // Only promote to "opened" if this hit isn't suspect AND we haven't
+    // already recorded an open.
+    if (!suspect && !log.openedAt) {
+      await this.prisma.emailLog.update({
+        where: { id: log.id },
+        data: { openedAt: now },
+      });
+      this.log.log(
+        `email ${log.id} marked opened (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
+      );
+    } else {
+      this.log.log(
+        `email ${log.id} pixel hit suspected ${suspect ? 'PREFETCH' : 'OK'} (age ${ageSeconds.toFixed(1)}s, ua="${meta.userAgent?.slice(0, 80) ?? '?'}")`,
+      );
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -414,6 +460,14 @@ export class EmailService {
    * Called by the scrape-queue scheduler (we'll wire it on the EmailModule
    * boot — for now it's a manual endpoint).
    */
+  /** All recorded pixel hits for one email log, newest first. */
+  async listHits(emailLogId: string) {
+    return this.prisma.emailPixelHit.findMany({
+      where: { emailLogId },
+      orderBy: { hitAt: 'desc' },
+    });
+  }
+
   async refreshAllRecent(daysBack = 7) {
     const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
     const recent = await this.prisma.emailLog.findMany({

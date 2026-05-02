@@ -8,12 +8,13 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { EmailService } from './email.service';
 import { readAttachment } from './attachments';
 
@@ -84,20 +85,34 @@ export class EmailController {
     return this.emails.refreshAllRecent(7);
   }
 
-  /** Open-tracking pixel. Fires once → sets openedAt. */
+  /** Open-tracking pixel. Logs every hit; defends against Gmail prefetch. */
   @Get('email/track/:trackingId.gif')
-  async track(@Param('trackingId') trackingId: string, @Res() res: Response) {
-    // Best-effort — never let recording failure leak; the pixel must always serve.
+  async track(
+    @Param('trackingId') trackingId: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     try {
-      await this.emails.recordOpen(trackingId);
+      const fwd = (req.headers['x-forwarded-for'] as string) ?? '';
+      const ip = fwd.split(',')[0].trim() || req.socket?.remoteAddress || null;
+      await this.emails.recordOpen(trackingId, {
+        userAgent: req.headers['user-agent'] as string | undefined,
+        ipAddress: ip ?? undefined,
+      });
     } catch {
-      /* ignore */
+      /* never let recording failure block serving the pixel */
     }
     res.setHeader('Content-Type', 'image/gif');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.send(PIXEL_GIF);
+  }
+
+  /** Inspect all pixel hits for an email — debugging/forensic endpoint. */
+  @Get('email/logs/:id/hits')
+  async hits(@Param('id') id: string) {
+    return this.emails.listHits(id);
   }
 
   /** Download a stored attachment. */

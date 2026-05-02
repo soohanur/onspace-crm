@@ -255,6 +255,25 @@ model EmailLog {
   @@map("email_logs")
 }
 
+/// One row per tracking-pixel fetch. Lets us inspect *who* is opening the
+/// email (Gmail's image proxy, the recipient's actual browser, etc.) and
+/// defend against pre-fetch false positives.
+model EmailPixelHit {
+  id          String   @id @default(uuid())
+  emailLogId  String   @map("email_log_id")
+  trackingId  String   @map("tracking_id")
+  userAgent   String?  @map("user_agent")
+  ipAddress   String?  @map("ip_address")
+  /// Set true if this hit landed within the prefetch window (likely Gmail
+  /// proxy pre-fetching on delivery, not a real open).
+  suspectedPrefetch Boolean  @default(false) @map("suspected_prefetch")
+  hitAt       DateTime @default(now()) @map("hit_at")
+
+  @@index([emailLogId, hitAt])
+  @@index([trackingId])
+  @@map("email_pixel_hits")
+}
+
 /// Inbound replies fetched from Gmail by polling the thread of a sent email.
 /// The first time we see a new message in a thread we own, we insert a row
 /// here and bump email_logs.repliedAt.

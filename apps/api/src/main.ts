@@ -4,9 +4,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // CORS origin(s) — comma-separated FRONTEND_URL list lets one deployment
+  // serve multiple domains (e.g. www + apex) without code changes.
+  const frontendUrls = (process.env.FRONTEND_URL ?? 'http://localhost:3000')
+    .split(',')
+    .map((u) => u.trim())
+    .filter(Boolean);
+
   const app = await NestFactory.create(AppModule, {
     cors: {
-      origin: ['http://localhost:3000'],
+      origin: frontendUrls,
       credentials: true,
     },
   });
