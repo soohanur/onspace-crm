@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, EmailLog, Lead, ThreadMessage } from '@/lib/api';
+import { relativeTime } from '@/lib/time';
 import { Chip } from '../ui/Chip';
 import { OpenedIndicator } from './OpenedIndicator';
 import { EmailReplyComposer } from './EmailReplyComposer';
@@ -352,16 +353,6 @@ function formatTime(iso: string): string {
   });
 }
 
-function relativeTime(d: Date): string {
-  const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

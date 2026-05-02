@@ -7,6 +7,7 @@ import { api, CreateTaskInput, Lead, Task } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
 import { ColumnKey } from '@/hooks/useColumnPrefs';
 import { defaultContextForStage } from '@/lib/tasks';
+import { relativeTime } from '@/lib/time';
 import { Chip } from './ui/Chip';
 import { StageBadge } from './leads/StageBadge';
 import { TaskFormModal } from './tasks/TaskFormModal';
@@ -519,15 +520,3 @@ function prettyHost(url: string) {
   }
 }
 
-function relativeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (!t) return '';
-  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}

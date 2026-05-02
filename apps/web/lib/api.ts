@@ -627,6 +627,116 @@ export interface ContactsStats {
   withPhone: number;
 }
 
+// ─── Phase 14: Dashboard ─────────────────────────────────────────────────
+
+export interface DashboardSummary {
+  today: {
+    tasksDueToday: number;
+    overdueTasks: number;
+    leadsAddedToday: number;
+    repliesToday: number;
+    opensToday: number;
+    meetingsToday: number;
+    callsToday: number;
+    proposalsSentToday: number;
+  };
+  stageFunnel: { stage: LeadStage; count: number }[];
+  followUpContextCounts: { context: TaskContext; count: number }[];
+  activeCampaigns: {
+    id: string;
+    name: string;
+    status: CampaignStatus;
+    sentCount: number;
+    recipientCount: number;
+    openedCount: number;
+    repliedCount: number;
+  }[];
+  unreadReplies: number;
+  upcomingMeetings: {
+    id: string;
+    title: string;
+    scheduledAt: string;
+    leadId: string;
+    leadBusinessName: string;
+    type: MeetingType;
+    meetingLink: string | null;
+  }[];
+}
+
+export type DashboardEvent =
+  | { kind: 'lead_created'; at: string; leadId: string; leadName: string }
+  | {
+      kind: 'email_sent';
+      at: string;
+      leadId: string;
+      leadName: string;
+      emailLogId: string;
+      subject: string;
+      campaignId: string | null;
+      campaignName: string | null;
+    }
+  | {
+      kind: 'email_opened';
+      at: string;
+      leadId: string;
+      leadName: string;
+      emailLogId: string;
+      subject: string;
+      campaignId: string | null;
+      campaignName: string | null;
+    }
+  | {
+      kind: 'email_replied';
+      at: string;
+      leadId: string;
+      leadName: string;
+      emailLogId: string;
+      snippet: string | null;
+    }
+  | {
+      kind: 'task_completed';
+      at: string;
+      leadId: string;
+      leadName: string;
+      taskId: string;
+      taskTitle: string;
+    }
+  | { kind: 'campaign_started'; at: string; campaignId: string; campaignName: string }
+  | {
+      kind: 'meeting_scheduled';
+      at: string;
+      leadId: string;
+      leadName: string;
+      meetingId: string;
+      meetingTitle: string;
+      scheduledAt: string;
+    }
+  | {
+      kind: 'meeting_completed';
+      at: string;
+      leadId: string;
+      leadName: string;
+      meetingId: string;
+      meetingTitle: string;
+    }
+  | {
+      kind: 'call_logged';
+      at: string;
+      leadId: string;
+      leadName: string;
+      callId: string;
+      direction: CallDirection;
+      outcome: CallOutcome | null;
+    }
+  | {
+      kind: 'proposal_sent';
+      at: string;
+      leadId: string;
+      leadName: string;
+      proposalId: string;
+      subject: string;
+    };
+
 // ─── Phase 9: Email templates + campaigns ────────────────────────────────
 
 export interface EmailTemplate {
@@ -1178,6 +1288,18 @@ export const api = {
   getContactsStats: (params: GlobalContactsFilter = {}) => {
     const qs = buildContactsQuery(params);
     return request<ContactsStats>(`/contacts/stats?${qs.toString()}`);
+  },
+
+  // ─── Phase 14: Dashboard ──────────────────────────────────────────────
+  getDashboardSummary: () => request<DashboardSummary>('/dashboard/summary'),
+  getDashboardActivity: (params: { limit?: number; days?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params.days !== undefined) qs.set('days', String(params.days));
+    const suffix = qs.toString();
+    return request<DashboardEvent[]>(
+      `/dashboard/activity${suffix ? `?${suffix}` : ''}`,
+    );
   },
 };
 

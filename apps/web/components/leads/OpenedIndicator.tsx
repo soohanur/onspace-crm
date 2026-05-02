@@ -1,6 +1,7 @@
 'use client';
 
 import { Eye, EyeOff } from 'lucide-react';
+import { relativeTime } from '@/lib/time';
 
 /**
  * Used in BOTH the email history row and the detail drawer so the open
@@ -48,13 +49,3 @@ function formatDateTime(d: Date): string {
   });
 }
 
-function relativeTime(d: Date): string {
-  const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
