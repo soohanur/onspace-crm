@@ -1,19 +1,21 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api, EmailLog } from '@/lib/api';
 import { Card } from '../ui/Card';
 import { Chip } from '../ui/Chip';
 import { SectionHeader } from './LeadOverviewCard';
+import { OpenedIndicator } from './OpenedIndicator';
 import {
   Mail,
   CheckCircle2,
   XCircle,
-  Eye,
   Reply,
   Clock,
   Paperclip,
   ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
 
 export function LeadEmailHistory({
@@ -29,12 +31,34 @@ export function LeadEmailHistory({
     refetchInterval: 5_000,
   });
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['email-accounts'],
+    queryFn: api.listEmailAccounts,
+  });
+  const missingReadScope = accounts.length > 0 && accounts.every((a) => !a.hasReadScope);
+
   return (
     <Card>
       <SectionHeader
         icon={<Mail size={14} />}
         title={`Email history (${emails.length})`}
       />
+
+      {missingReadScope && (
+        <div className="mb-3 rounded-md border border-warning/40 bg-[#FEF4E5] p-3 text-bodysm flex items-start gap-2">
+          <AlertCircle size={14} className="text-warning shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-medium text-ink">Reply detection isn't enabled</div>
+            <div className="text-caption text-ink-muted mt-0.5">
+              Your connected Gmail account is missing the read scope. {' '}
+              <Link href="/settings" className="text-primary hover:underline">
+                Disconnect &amp; reconnect from Settings
+              </Link>{' '}
+              to allow OnspaceCRM to fetch replies.
+            </div>
+          </div>
+        </div>
+      )}
 
       {emails.length === 0 ? (
         <div className="py-8 text-center text-ink-muted text-bodysm border border-dashed border-border rounded-md">
@@ -66,11 +90,6 @@ function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void })
           <div className="flex items-center gap-2 flex-wrap">
             <div className="font-medium text-ink truncate">{email.subject}</div>
             <StatusChip status={email.status} />
-            {email.openedAt && (
-              <Chip tone="positive" className="!h-5 !text-[11px]">
-                <Eye size={10} className="mr-1" /> opened
-              </Chip>
-            )}
             {replyCount > 0 && (
               <Chip tone="primary" className="!h-5 !text-[11px]">
                 <Reply size={10} className="mr-1" /> {replyCount}
@@ -90,9 +109,13 @@ function EmailRow({ email, onClick }: { email: EmailLog; onClick?: () => void })
               </>
             )}
           </div>
+          {/* Always-visible open status — exact time when opened, or "Not opened yet" otherwise. */}
+          <div className="mt-1 text-caption">
+            <OpenedIndicator openedAt={email.openedAt} />
+          </div>
           <div className="text-caption text-neutral font-mono font-tabular mt-0.5 inline-flex items-center gap-1">
             <Clock size={10} />
-            {new Date(ts).toLocaleString()}
+            sent {new Date(ts).toLocaleString()}
             <span> · from {email.fromEmail}</span>
           </div>
           {email.status === 'failed' && email.error && (

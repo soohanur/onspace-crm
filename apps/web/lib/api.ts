@@ -134,6 +134,8 @@ export interface EmailAccount {
   active: boolean;
   expiresAt: string;
   createdAt: string;
+  /** True if scopes include gmail.readonly (or higher) — needed for reply detection. */
+  hasReadScope?: boolean;
 }
 
 export type EmailStatus = 'queued' | 'sending' | 'sent' | 'failed';

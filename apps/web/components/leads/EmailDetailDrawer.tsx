@@ -6,6 +6,7 @@ import { api, EmailLog, Lead } from '@/lib/api';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { SendEmailDialog } from './SendEmailDialog';
+import { OpenedIndicator } from './OpenedIndicator';
 import {
   X,
   Mail,
@@ -13,10 +14,10 @@ import {
   RefreshCw,
   Paperclip,
   Download,
-  Eye,
   CheckCircle2,
   XCircle,
   Clock,
+  AlertCircle,
 } from 'lucide-react';
 
 export function EmailDetailDrawer({
@@ -89,21 +90,33 @@ export function EmailDetailDrawer({
           ) : (
             <>
               {/* Status strip */}
-              <div className="px-5 py-3 border-b border-border bg-background flex flex-wrap items-center gap-3 text-bodysm">
-                <StatusChip status={email.status} />
-                <Indicator
-                  icon={<Eye size={11} />}
-                  label="Opened"
-                  value={email.openedAt}
-                />
-                <Indicator
-                  icon={<Reply size={11} />}
-                  label="Replied"
-                  value={email.repliedAt}
-                />
-                <span className="ml-auto text-caption text-neutral font-mono font-tabular">
-                  {new Date(email.sentAt ?? email.createdAt).toLocaleString()}
-                </span>
+              <div className="px-5 py-3 border-b border-border bg-background space-y-1.5">
+                <div className="flex flex-wrap items-center gap-3 text-bodysm">
+                  <StatusChip status={email.status} />
+                  <span className="ml-auto text-caption text-neutral font-mono font-tabular">
+                    sent {new Date(email.sentAt ?? email.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {/* Always shows the open status — exact time when opened, "Not opened yet" otherwise. */}
+                <div className="text-bodysm">
+                  <OpenedIndicator openedAt={email.openedAt} size="md" />
+                </div>
+                <div className="text-bodysm">
+                  {email.repliedAt ? (
+                    <span className="inline-flex items-center gap-1 text-success">
+                      <Reply size={13} />
+                      <span className="font-medium">Replied</span>
+                      <span className="font-mono font-tabular">
+                        {new Date(email.repliedAt).toLocaleString()}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-neutral">
+                      <Reply size={13} />
+                      <span>No reply yet</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Headers */}
@@ -180,10 +193,28 @@ export function EmailDetailDrawer({
                   </button>
                 </div>
 
+                {refresh.error && (
+                  <div className="mb-3 rounded-md border border-error/40 bg-errorBg p-3 text-bodysm flex items-start gap-2">
+                    <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-ink">Couldn't fetch replies</div>
+                      <div className="text-caption text-ink-muted mt-0.5">
+                        {(refresh.error as Error).message}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {refresh.data && refresh.data.newReplies === 0 && !refresh.error && (
+                  <div className="mb-3 text-caption text-ink-muted">
+                    Checked {new Date().toLocaleTimeString()} — no new replies.
+                  </div>
+                )}
+
                 {!email.replies || email.replies.length === 0 ? (
                   <div className="text-bodysm text-ink-muted py-6 text-center border border-dashed border-border rounded-md">
-                    No replies yet. We poll Gmail every couple of minutes — you'll see
-                    them here automatically.
+                    No replies yet. The poller checks Gmail every couple of minutes,
+                    or click <span className="font-medium text-ink">Check for replies</span> above.
                   </div>
                 ) : (
                   <div className="space-y-3">

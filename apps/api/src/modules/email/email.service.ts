@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailAccountsService } from './email-accounts.service';
 import { GmailService, AttachmentInput } from './gmail.service';
 import { saveAttachment, StoredAttachment } from './attachments';
+import { accountHasReadScope } from './scopes';
 
 const toJson = (v: unknown): Prisma.InputJsonValue =>
   (v ?? []) as Prisma.InputJsonValue;
@@ -211,6 +212,14 @@ export class EmailService {
       return { fetched: 0, newReplies: 0 };
     }
 
+    // Fail loud if the connected account doesn't have read scope. Caught by
+    // the controller and surfaced in the UI.
+    if (log.account && !accountHasReadScope(log.account.scopes)) {
+      throw new Error(
+        'Connected Gmail account is missing the gmail.readonly scope. Disconnect and Connect Gmail again from Settings.',
+      );
+    }
+
     const { accessToken, refreshToken } = await this.accounts.getReadyForSend(log.accountId);
     const messages = await this.gmail.fetchThread({
       accessToken,
@@ -218,23 +227,21 @@ export class EmailService {
       threadId: log.threadId,
     });
 
+    // Build the set of Gmail message IDs WE sent in this thread (across all
+    // logs that share the threadId — covers Reply continuations too).
+    const ours = await this.prisma.emailLog.findMany({
+      where: { threadId: log.threadId, messageId: { not: null } },
+      select: { messageId: true },
+    });
+    const ourMessageIds = new Set(ours.map((o) => o.messageId).filter(Boolean) as string[]);
+
     let added = 0;
     for (const m of messages) {
-      // Skip messages WE sent (matching gmailMessageId of any sent log).
-      if (m.gmailMessageId === log.messageId) continue;
-      // Skip if already stored.
+      if (ourMessageIds.has(m.gmailMessageId)) continue;
       const existing = await this.prisma.emailReply.findUnique({
         where: { gmailMessageId: m.gmailMessageId },
       });
       if (existing) continue;
-      // Skip messages from ourselves (the connected account email).
-      if (
-        m.fromEmail &&
-        log.fromEmail &&
-        m.fromEmail.toLowerCase() === log.fromEmail.toLowerCase()
-      ) {
-        continue;
-      }
 
       await this.prisma.emailReply.create({
         data: {

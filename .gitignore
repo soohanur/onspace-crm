@@ -36,3 +36,6 @@ test-results
 # OAuth client secret JSONs — never commit these
 client_secret*.json
 *credentials*.json
+
+# user-uploaded email attachments (filesystem store)
+apps/api/uploads/
