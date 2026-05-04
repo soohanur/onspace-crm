@@ -107,76 +107,6 @@ export function LeadActivityPanel({
   );
 }
 
-interface StagePeriod {
-  stage: LeadStage;
-  /** When the lead entered this stage. */
-  startedAt: string;
-  /** When the lead left this stage. null = still in this stage. */
-  endedAt: string | null;
-  /** Trigger that ENDED this period (= the next transition's reason). null while still active. */
-  endedBy: string | null;
-  /** id of the LeadStageHistory row that ended this period — for delete. */
-  exitEntryId: string | null;
-}
-
-/**
- * Compute the contiguous list of stage periods from lead.createdAt and the
- * sorted-ascending stage_changed history. The result reads chronologically —
- * the first period starts at the lead's creation, the last period is still
- * active and ends at "now".
- */
-function buildStagePeriods(
-  lead: Lead,
-  history: Array<
-    Extract<LeadActivityEvent, { kind: 'stage_changed' }>
-  >,
-): StagePeriod[] {
-  const sorted = [...history].sort((a, b) =>
-    a.at < b.at ? -1 : a.at > b.at ? 1 : 0,
-  );
-  if (sorted.length === 0) {
-    return [
-      {
-        stage: lead.stage,
-        startedAt: lead.createdAt,
-        endedAt: null,
-        endedBy: null,
-        exitEntryId: null,
-      },
-    ];
-  }
-  const periods: StagePeriod[] = [];
-  // Initial period: from lead creation until the first transition out of the
-  // initial stage. Initial stage = first transition's fromStage.
-  periods.push({
-    stage: sorted[0].fromStage,
-    startedAt: lead.createdAt,
-    endedAt: sorted[0].at,
-    endedBy: sorted[0].trigger,
-    exitEntryId: sorted[0].entryId,
-  });
-  // Middle periods (each transition starts a period that the next transition ends).
-  for (let i = 0; i < sorted.length - 1; i++) {
-    periods.push({
-      stage: sorted[i].toStage,
-      startedAt: sorted[i].at,
-      endedAt: sorted[i + 1].at,
-      endedBy: sorted[i + 1].trigger,
-      exitEntryId: sorted[i + 1].entryId,
-    });
-  }
-  // Final period: started by the last transition, currently active.
-  const last = sorted[sorted.length - 1];
-  periods.push({
-    stage: last.toStage,
-    startedAt: last.at,
-    endedAt: null,
-    endedBy: null,
-    exitEntryId: null,
-  });
-  return periods;
-}
-
 function formatDuration(ms: number): string {
   if (ms < 60_000) return '< 1m';
   const mins = Math.floor(ms / 60_000);
@@ -233,19 +163,44 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
     },
   });
 
-  const transitions = events.filter(
-    (e): e is Extract<LeadActivityEvent, { kind: 'stage_changed' }> =>
-      e.kind === 'stage_changed',
-  );
-  const periods = buildStagePeriods(lead, transitions);
+  // Newest-first transitions and the lead-created event, kept as separate
+  // log rows so every state change in the lead's life is explicit.
+  const transitions = events
+    .filter(
+      (e): e is Extract<LeadActivityEvent, { kind: 'stage_changed' }> =>
+        e.kind === 'stage_changed',
+    )
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+
+  // For each transition, compute how long the lead was in the previous stage
+  // (= time since the previous transition, or since lead.createdAt for the
+  // very first transition).
+  const ascending = [...transitions].reverse();
+  const dwellByEntryId = new Map<string, number>();
+  for (let i = 0; i < ascending.length; i++) {
+    const prevAt =
+      i === 0
+        ? new Date(lead.createdAt).getTime()
+        : new Date(ascending[i - 1].at).getTime();
+    const currAt = new Date(ascending[i].at).getTime();
+    dwellByEntryId.set(ascending[i].entryId, Math.max(0, currAt - prevAt));
+  }
+
+  // Time spent in the current stage = time since the last transition, or
+  // since lead.createdAt if there are no transitions yet.
+  const lastTransitionAt =
+    transitions.length > 0
+      ? new Date(transitions[0].at).getTime()
+      : new Date(lead.createdAt).getTime();
+  const currentDwell = formatDuration(Math.max(0, Date.now() - lastTransitionAt));
 
   return (
     <Card>
-      <SectionHeader icon={<GitBranch size={14} />} title="Stage timeline" />
+      <SectionHeader icon={<GitBranch size={14} />} title="Stage history" />
 
       <div className="flex items-center gap-3 flex-wrap pb-4 mb-4 border-b border-border">
         <span className="text-caption uppercase tracking-wider text-neutral">
-          Current stage
+          Current
         </span>
         <StagePicker
           value={lead.stage}
@@ -253,103 +208,119 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
           pending={stageMut.isPending}
         />
         <span className="text-caption text-ink-muted">
-          {transitions.length} change{transitions.length === 1 ? '' : 's'} on record
+          for {currentDwell}
+        </span>
+        <span className="text-caption text-neutral">
+          · {transitions.length} change{transitions.length === 1 ? '' : 's'} on record
         </span>
       </div>
 
       {isLoading ? (
         <div className="text-bodysm text-ink-muted py-6">Loading…</div>
       ) : (
-        <ol className="relative pl-5 space-y-4">
+        <ol className="relative pl-5 space-y-3">
           <span
             className="absolute left-1.5 top-1 bottom-1 w-px bg-border"
             aria-hidden
           />
-          {periods
-            .slice()
-            .reverse() // newest period first
-            .map((p) => {
-              const start = new Date(p.startedAt).getTime();
-              const end = p.endedAt
-                ? new Date(p.endedAt).getTime()
-                : Date.now();
-              const duration = formatDuration(Math.max(0, end - start));
-              const active = p.endedAt === null;
-              return (
-                <li
-                  key={`${p.stage}-${p.startedAt}`}
-                  className="relative group"
-                >
-                  <span
-                    className={clsx(
-                      'absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface -translate-x-[2.5px]',
-                      active ? 'bg-success' : 'bg-primary',
-                    )}
-                    aria-hidden
-                  />
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={clsx(
-                            'inline-flex items-center h-6 px-2 rounded text-bodysm font-medium border',
-                            stageClass(p.stage),
-                          )}
-                        >
-                          {stageLabel(p.stage)}
-                        </span>
-                        <span className="text-bodysm font-medium text-ink">
-                          · {duration}
-                        </span>
-                        {active && (
-                          <span className="inline-flex items-center h-5 px-1.5 rounded text-[10px] font-medium bg-success/10 text-success border border-success/20">
-                            Current
-                          </span>
+
+          {transitions.map((t) => {
+            const dwellMs = dwellByEntryId.get(t.entryId) ?? 0;
+            return (
+              <li key={t.entryId} className="relative group">
+                <span
+                  className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-primary -translate-x-[2.5px]"
+                  aria-hidden
+                />
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
+                          stageClass(t.fromStage),
                         )}
-                      </div>
-                      <div className="text-caption text-ink-muted mt-1">
-                        {formatDate(p.startedAt)}{' '}
-                        <span className="text-neutral">→</span>{' '}
-                        {p.endedAt ? formatDate(p.endedAt) : 'now'}
-                      </div>
-                      {p.endedBy && (
-                        <div className="text-caption text-neutral mt-0.5">
-                          Ended by:{' '}
-                          {p.endedBy === 'manual'
-                            ? 'Manual change'
-                            : `Automated · ${p.endedBy.replace(/_/g, ' ')}`}
-                        </div>
+                      >
+                        {stageLabel(t.fromStage)}
+                      </span>
+                      <span className="text-neutral">→</span>
+                      <span
+                        className={clsx(
+                          'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
+                          stageClass(t.toStage),
+                        )}
+                      >
+                        {stageLabel(t.toStage)}
+                      </span>
+                      <span className="text-caption text-ink-muted">
+                        · was in {stageLabel(t.fromStage)} for{' '}
+                        {formatDuration(dwellMs)}
+                      </span>
+                    </div>
+                    <div className="text-caption text-ink-muted mt-1 font-mono font-tabular">
+                      {formatDate(t.at)}
+                    </div>
+                    <div className="text-caption text-neutral mt-0.5">
+                      {t.trigger === 'manual'
+                        ? 'Manual change'
+                        : `Automated · ${t.trigger.replace(/_/g, ' ')}`}
+                      {t.actorLabel && (
+                        <span className="text-neutral"> · {t.actorLabel}</span>
                       )}
                     </div>
-                    <span
-                      className="text-caption text-ink-muted whitespace-nowrap shrink-0 mt-1"
-                      title={new Date(p.startedAt).toLocaleString()}
-                    >
-                      {relativeTime(p.startedAt)}
-                    </span>
-                    {p.exitEntryId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              'Delete the transition that ended this stage period? The current stage will not change.',
-                            )
-                          ) {
-                            deleteEntry.mutate(p.exitEntryId!);
-                          }
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition text-neutral hover:text-error mt-1"
-                        aria-label="Delete transition"
-                        disabled={deleteEntry.isPending}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
                   </div>
-                </li>
-              );
-            })}
+                  <span
+                    className="text-caption text-ink-muted whitespace-nowrap shrink-0 mt-1"
+                    title={new Date(t.at).toLocaleString()}
+                  >
+                    {relativeTime(t.at)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Delete this transition entry? The current stage will not change.',
+                        )
+                      ) {
+                        deleteEntry.mutate(t.entryId);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition text-neutral hover:text-error mt-1"
+                    aria-label="Delete entry"
+                    disabled={deleteEntry.isPending}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+
+          {/* Always show the created event at the very bottom — it's the
+              anchor of every duration calc above. */}
+          <li className="relative">
+            <span
+              className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-neutral -translate-x-[2.5px]"
+              aria-hidden
+            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-bodysm text-ink">
+                  <strong>Lead created</strong>
+                </div>
+                <div className="text-caption text-ink-muted mt-1 font-mono font-tabular">
+                  {formatDate(lead.createdAt)}
+                </div>
+              </div>
+              <span
+                className="text-caption text-ink-muted whitespace-nowrap shrink-0 mt-1"
+                title={new Date(lead.createdAt).toLocaleString()}
+              >
+                {relativeTime(lead.createdAt)}
+              </span>
+            </div>
+          </li>
         </ol>
       )}
     </Card>
