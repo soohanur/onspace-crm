@@ -27,7 +27,6 @@ Edit `.env` — fill `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` if you want e
 That single command:
 - Frees ports 3000/4000 (kills leftover processes — no port-collision surprises).
 - Starts Postgres + Redis (skipped if already running).
-- Applies pending migrations.
 - Builds + runs the API on `:4000`.
 - Wipes `apps/web/.next` and starts `next dev` on `:3000`.
 - Streams both logs prefixed with `[api]` / `[web]` until you Ctrl-C.
@@ -35,6 +34,13 @@ That single command:
 When you see `[dev] ✓ ready`, open **http://localhost:3000**.
 
 Stop with **Ctrl-C** — Postgres + Redis stay up (cheap, fine to leave).
+
+> **After a `git pull` that touched `packages/db`**, apply migrations
+> once by hand — `dev.sh` deliberately doesn't touch the schema:
+> ```bash
+> cd packages/db
+> DATABASE_URL='postgresql://onspace:onspace@localhost:5432/onspace_crm?schema=public' pnpm exec prisma migrate deploy
+> ```
 
 ---
 

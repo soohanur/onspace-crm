@@ -2,13 +2,16 @@
 # One-shot dev launcher. Brings up Postgres + Redis + API + Web.
 #   - Kills anything on ports 3000/4000 first (no port-collision surprises).
 #   - Starts Postgres + Redis if they aren't already up.
-#   - Applies pending migrations.
 #   - Builds the API once and runs the compiled dist (this is what's been
 #     ship-tested every phase; `nest start --watch` randomly stalls).
 #   - Wipes apps/web/.next then runs `next dev` (avoids the recurring
 #     "Cannot find module ./vendor-chunks/..." poison from prior builds).
 #   - Streams both logs to this terminal with [api] / [web] prefixes.
 #   - Ctrl-C cleanly stops the API + Web children. Postgres/Redis stay up.
+#
+# NOTE: this script does NOT run prisma migrations. Run them by hand
+# after a `git pull` that touched packages/db:
+#   cd packages/db && pnpm exec prisma migrate deploy
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,18 +61,14 @@ export API_PORT="${API_PORT:-4000}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4000}"
 set +a
 
-# ─── 5. Migrate ────────────────────────────────────────────────────────
-echo "[dev] applying migrations..."
-(cd "$ROOT/packages/db" && pnpm exec prisma migrate deploy >/dev/null 2>&1)
-
-# ─── 6. Build API ──────────────────────────────────────────────────────
+# ─── 5. Build API ──────────────────────────────────────────────────────
 echo "[dev] building api..."
 (cd "$ROOT/apps/api" && rm -f tsconfig.tsbuildinfo && pnpm exec nest build >/dev/null)
 
-# ─── 7. Wipe .next ─────────────────────────────────────────────────────
+# ─── 6. Wipe .next ─────────────────────────────────────────────────────
 rm -rf "$ROOT/apps/web/.next"
 
-# ─── 8. Start API + Web in background, prefix their logs ───────────────
+# ─── 7. Start API + Web in background, prefix their logs ───────────────
 : >"$API_LOG"
 : >"$WEB_LOG"
 (cd "$ROOT/apps/api" && node dist/main.js) >"$API_LOG" 2>&1 &
@@ -100,7 +99,7 @@ TAIL_API=$!
 tail -n +1 -F "$WEB_LOG" 2>/dev/null | sed -u 's/^/[web] /' &
 TAIL_WEB=$!
 
-# ─── 9. Wait for both to be ready, then announce ───────────────────────
+# ─── 8. Wait for both to be ready, then announce ───────────────────────
 echo "[dev] waiting for api on :4000 and web on :3000..."
 for _ in $(seq 1 90); do
   if curl -sf -o /dev/null http://localhost:4000/api/health 2>/dev/null \
