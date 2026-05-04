@@ -263,6 +263,8 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
                     <div className="text-caption text-neutral mt-0.5">
                       {t.trigger === 'manual'
                         ? 'Manual change'
+                        : t.trigger === 'legacy_backfill'
+                        ? 'Pre-tracking change · time approximated from stageChangedAt'
                         : `Automated · ${t.trigger.replace(/_/g, ' ')}`}
                       {t.actorLabel && (
                         <span className="text-neutral"> · {t.actorLabel}</span>

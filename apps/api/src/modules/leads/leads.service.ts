@@ -1,4 +1,11 @@
-import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  forwardRef,
+} from '@nestjs/common';
 import { Prisma, LeadStage, LeadValidity } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StageAutomationService } from './stage-automation.service';
@@ -56,13 +63,56 @@ export interface LeadFilter {
 }
 
 @Injectable()
-export class LeadsService {
+export class LeadsService implements OnModuleInit {
+  private readonly log = new Logger(LeadsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => StageAutomationService))
     private readonly stageAutomation: StageAutomationService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Phase 19.x — one-shot backfill. Any lead that's progressed past `new`
+   * but has zero rows in `LeadStageHistory` predates the history table; we
+   * synthesize a single entry from `stageChangedAt` (or `createdAt` if
+   * null) so the Stage tab can render at least one timestamped change.
+   * Idempotent: only fills leads with no existing history rows.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const candidates = await this.prisma.lead.findMany({
+        where: {
+          stage: { not: 'new' },
+          stageHistory: { none: {} },
+        },
+        select: {
+          id: true,
+          stage: true,
+          stageChangedAt: true,
+          createdAt: true,
+        },
+      });
+      if (candidates.length === 0) return;
+      await this.prisma.leadStageHistory.createMany({
+        data: candidates.map((l) => ({
+          leadId: l.id,
+          fromStage: 'new' as LeadStage,
+          toStage: l.stage,
+          trigger: 'legacy_backfill',
+          occurredAt: l.stageChangedAt ?? l.createdAt,
+        })),
+      });
+      this.log.log(
+        `[stage-history] backfilled ${candidates.length} legacy entr${candidates.length === 1 ? 'y' : 'ies'}`,
+      );
+    } catch (err) {
+      this.log.warn(
+        `[stage-history] backfill failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 
   private buildWhere(f: LeadFilter): Prisma.LeadWhereInput {
     const where: Prisma.LeadWhereInput = {};
