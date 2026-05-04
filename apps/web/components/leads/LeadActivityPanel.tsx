@@ -1,12 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import clsx from 'clsx';
-import { api, Lead, LeadActivityEvent } from '@/lib/api';
+import { api, Lead, LeadActivityEvent, LeadStage } from '@/lib/api';
 import { stageClass, stageLabel } from '@/lib/stages';
 import { Card } from '../ui/Card';
 import { SectionHeader } from './LeadOverviewCard';
+import { StagePicker } from './StagePicker';
 import { relativeTime } from '@/lib/time';
 import { LeadEmailHistory } from './LeadEmailHistory';
 import { LeadCallsPanel } from './LeadCallsPanel';
@@ -16,14 +21,15 @@ import { LeadProposalsPanel } from './LeadProposalsPanel';
 import { LeadSequencesPanel } from './LeadSequencesPanel';
 import { LeadNotesPanel } from './LeadNotesPanel';
 import {
-  Calendar,
+  CheckSquare,
   FileText,
   GitBranch,
   Mail,
   Phone,
   StickyNote,
+  Trash2,
+  Video,
   Workflow,
-  CheckSquare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -41,7 +47,7 @@ const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'stage', label: 'Stage', Icon: GitBranch },
   { id: 'emails', label: 'Emails', Icon: Mail },
   { id: 'calls', label: 'Calls', Icon: Phone },
-  { id: 'meetings', label: 'Meetings', Icon: Calendar },
+  { id: 'meetings', label: 'Meetings', Icon: Video },
   { id: 'tasks', label: 'Tasks', Icon: CheckSquare },
   { id: 'proposals', label: 'Proposals', Icon: FileText },
   { id: 'notes', label: 'Notes', Icon: StickyNote },
@@ -51,8 +57,9 @@ const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
 /**
  * Phase 19.2 — tabbed lead detail surface. Each tab renders the
  * corresponding CRUD panel (so create/edit/delete still work). The
- * Stage tab is a read-only history pulled from the activity endpoint
- * filtered to stage_changed + lead_created events.
+ * Stage tab combines a current-stage editor with a deletable history
+ * list backed by /leads/:leadId/activity (filtered) and
+ * DELETE /leads/:leadId/stage-history/:entryId.
  */
 export function LeadActivityPanel({
   lead,
@@ -85,7 +92,7 @@ export function LeadActivityPanel({
       </div>
 
       <div>
-        {tab === 'stage' && <StageHistoryPanel leadId={lead.id} />}
+        {tab === 'stage' && <StageHistoryPanel lead={lead} />}
         {tab === 'emails' && (
           <LeadEmailHistory leadId={lead.id} onOpen={onOpenEmail} />
         )}
@@ -100,22 +107,60 @@ export function LeadActivityPanel({
   );
 }
 
-function StageHistoryPanel({ leadId }: { leadId: string }) {
+function StageHistoryPanel({ lead }: { lead: Lead }) {
+  const qc = useQueryClient();
+
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ['lead-activity', leadId],
-    queryFn: () => api.getLeadActivity(leadId, { days: 365, limit: 200 }),
+    queryKey: ['lead-activity', lead.id],
+    queryFn: () => api.getLeadActivity(lead.id, { days: 365, limit: 200 }),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
+  const stageMut = useMutation({
+    mutationFn: (stage: LeadStage) => api.updateLeadStage(lead.id, stage),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead', lead.id] });
+      qc.invalidateQueries({ queryKey: ['lead-activity', lead.id] });
+      qc.invalidateQueries({ queryKey: ['leads-global'] });
+    },
+  });
+
+  const deleteEntry = useMutation({
+    mutationFn: (entryId: string) =>
+      api.deleteStageHistoryEntry(lead.id, entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-activity', lead.id] });
+    },
+  });
+
   const stageEvents = events.filter(
-    (e): e is Extract<LeadActivityEvent, { kind: 'stage_changed' | 'lead_created' }> =>
-      e.kind === 'stage_changed' || e.kind === 'lead_created',
+    (
+      e,
+    ): e is Extract<
+      LeadActivityEvent,
+      { kind: 'stage_changed' | 'lead_created' }
+    > => e.kind === 'stage_changed' || e.kind === 'lead_created',
   );
 
   return (
     <Card>
-      <SectionHeader icon={<GitBranch size={14} />} title="Stage history" />
+      <SectionHeader icon={<GitBranch size={14} />} title="Stage" />
+
+      <div className="flex items-center gap-3 flex-wrap pb-4 mb-4 border-b border-border">
+        <span className="text-caption uppercase tracking-wider text-neutral">
+          Current stage
+        </span>
+        <StagePicker
+          value={lead.stage}
+          onChange={(s) => stageMut.mutate(s)}
+          pending={stageMut.isPending}
+        />
+        <span className="text-caption text-ink-muted">
+          {stageEvents.length} change{stageEvents.length === 1 ? '' : 's'} on record
+        </span>
+      </div>
+
       {isLoading ? (
         <div className="text-bodysm text-ink-muted py-6">Loading…</div>
       ) : stageEvents.length === 0 ? (
@@ -128,8 +173,11 @@ function StageHistoryPanel({ leadId }: { leadId: string }) {
             className="absolute left-1.5 top-1 bottom-1 w-px bg-border"
             aria-hidden
           />
-          {stageEvents.map((e, idx) => (
-            <li key={`${e.kind}:${idx}`} className="relative">
+          {stageEvents.map((e) => (
+            <li
+              key={e.kind === 'stage_changed' ? e.entryId : 'lead-created'}
+              className="relative group"
+            >
               <span
                 className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-primary -translate-x-[2.5px]"
                 aria-hidden
@@ -142,30 +190,35 @@ function StageHistoryPanel({ leadId }: { leadId: string }) {
                       <span className="text-ink-muted">— {e.leadName}</span>
                     </div>
                   ) : (
-                    <div className="text-bodysm text-ink flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={clsx(
-                          'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
-                          stageClass(e.fromStage),
-                        )}
-                      >
-                        {stageLabel(e.fromStage)}
-                      </span>
-                      <span className="text-neutral">→</span>
-                      <span
-                        className={clsx(
-                          'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
-                          stageClass(e.toStage),
-                        )}
-                      >
-                        {stageLabel(e.toStage)}
-                      </span>
-                      <span className="text-caption text-ink-muted">
+                    <>
+                      <div className="text-bodysm text-ink flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={clsx(
+                            'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
+                            stageClass(e.fromStage),
+                          )}
+                        >
+                          {stageLabel(e.fromStage)}
+                        </span>
+                        <span className="text-neutral">→</span>
+                        <span
+                          className={clsx(
+                            'inline-flex items-center h-5 px-1.5 rounded text-[11px] font-medium border',
+                            stageClass(e.toStage),
+                          )}
+                        >
+                          {stageLabel(e.toStage)}
+                        </span>
+                      </div>
+                      <div className="text-caption text-ink-muted mt-0.5">
                         {e.trigger === 'manual'
-                          ? '· Manual'
-                          : `· Automated (${e.trigger.replace(/_/g, ' ')})`}
-                      </span>
-                    </div>
+                          ? 'Manual change'
+                          : `Automated · ${e.trigger.replace(/_/g, ' ')}`}
+                        {e.actorLabel && (
+                          <span className="text-neutral"> · {e.actorLabel}</span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
                 <span
@@ -174,6 +227,25 @@ function StageHistoryPanel({ leadId }: { leadId: string }) {
                 >
                   {relativeTime(e.at)}
                 </span>
+                {e.kind === 'stage_changed' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Delete this stage history entry? The current stage will not change.',
+                        )
+                      ) {
+                        deleteEntry.mutate(e.entryId);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition text-neutral hover:text-error"
+                    aria-label="Delete entry"
+                    disabled={deleteEntry.isPending}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             </li>
           ))}

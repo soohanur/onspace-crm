@@ -744,6 +744,7 @@ export type LeadActivityEvent =
   | {
       kind: 'stage_changed';
       at: string;
+      entryId: string;
       fromStage: LeadStage;
       toStage: LeadStage;
       trigger: string;
@@ -1327,6 +1328,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
+  updateNote: (leadId: string, noteId: string, body: string) =>
+    request<Note>(`/leads/${leadId}/notes/${noteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ body }),
+    }),
   deleteNote: (leadId: string, noteId: string) =>
     request<{ ok: true }>(`/leads/${leadId}/notes/${noteId}`, {
       method: 'DELETE',
@@ -1770,6 +1776,11 @@ export const api = {
       `/leads/${leadId}/activity${suffix ? `?${suffix}` : ''}`,
     );
   },
+  deleteStageHistoryEntry: (leadId: string, entryId: string) =>
+    request<{ ok: true }>(
+      `/leads/${leadId}/stage-history/${entryId}`,
+      { method: 'DELETE' },
+    ),
 };
 
 function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {

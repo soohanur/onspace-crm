@@ -102,6 +102,14 @@ export class LeadsController {
     return this.leads.updateScore(id, Math.round(score));
   }
 
+  @Delete(':leadId/stage-history/:entryId')
+  async removeStageHistory(
+    @Param('leadId') leadId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.leads.deleteStageHistoryEntry(leadId, entryId);
+  }
+
   @Patch(':id/validity')
   async updateValidity(
     @Param('id') id: string,

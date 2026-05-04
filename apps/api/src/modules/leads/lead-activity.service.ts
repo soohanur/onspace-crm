@@ -19,6 +19,7 @@ export type LeadActivityEvent =
   | {
       kind: 'stage_changed';
       at: string;
+      entryId: string;
       fromStage: LeadStage;
       toStage: LeadStage;
       trigger: string;
@@ -298,6 +299,7 @@ export class LeadActivityService {
       events.push({
         kind: 'stage_changed',
         at: r.occurredAt.toISOString(),
+        entryId: r.id,
         fromStage: r.fromStage,
         toStage: r.toStage,
         trigger: r.trigger,

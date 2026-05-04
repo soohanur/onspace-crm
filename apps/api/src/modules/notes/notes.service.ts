@@ -23,6 +23,17 @@ export class NotesService {
     });
   }
 
+  async update(leadId: string, noteId: string, body: string) {
+    const note = await this.prisma.note.findFirst({
+      where: { id: noteId, leadId },
+    });
+    if (!note) throw new NotFoundException('Note not found');
+    return this.prisma.note.update({
+      where: { id: noteId },
+      data: { body: body.trim() },
+    });
+  }
+
   async remove(leadId: string, noteId: string) {
     const note = await this.prisma.note.findFirst({
       where: { id: noteId, leadId },

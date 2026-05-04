@@ -6,11 +6,13 @@ import { api } from '@/lib/api';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { SectionHeader } from './LeadOverviewCard';
-import { StickyNote, Trash2 } from 'lucide-react';
+import { Pencil, StickyNote, Trash2 } from 'lucide-react';
 
 export function LeadNotesPanel({ leadId }: { leadId: string }) {
   const qc = useQueryClient();
   const [body, setBody] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Phase 19 — focus the input when the action bar's "Add note" button
@@ -30,20 +32,48 @@ export function LeadNotesPanel({ leadId }: { leadId: string }) {
     queryFn: () => api.listNotes(leadId),
   });
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['notes', leadId] });
+    qc.invalidateQueries({ queryKey: ['lead-activity', leadId] });
+  };
+
   const create = useMutation({
     mutationFn: (text: string) => api.createNote(leadId, text),
     onSuccess: () => {
       setBody('');
-      qc.invalidateQueries({ queryKey: ['notes', leadId] });
+      invalidate();
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      api.updateNote(leadId, id, text),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditingBody('');
+      invalidate();
     },
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteNote(leadId, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes', leadId] }),
+    onSuccess: invalidate,
   });
 
   const canSubmit = body.trim().length > 0 && !create.isPending;
+
+  const startEdit = (id: string, current: string) => {
+    setEditingId(id);
+    setEditingBody(current);
+  };
+  const saveEdit = () => {
+    if (!editingId || editingBody.trim().length === 0) return;
+    update.mutate({ id: editingId, text: editingBody.trim() });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingBody('');
+  };
 
   return (
     <Card id="notes">
@@ -80,15 +110,61 @@ export function LeadNotesPanel({ leadId }: { leadId: string }) {
                 <div className="text-caption font-mono font-tabular text-neutral">
                   {new Date(n.createdAt).toLocaleString()}
                 </div>
-                <button
-                  onClick={() => remove.mutate(n.id)}
-                  className="opacity-0 group-hover:opacity-100 transition text-neutral hover:text-error"
-                  aria-label="Delete note"
-                >
-                  <Trash2 size={13} />
-                </button>
+                {editingId !== n.id && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      onClick={() => startEdit(n.id, n.body)}
+                      className="text-neutral hover:text-primary"
+                      aria-label="Edit note"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => remove.mutate(n.id)}
+                      className="text-neutral hover:text-error"
+                      aria-label="Delete note"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
               </div>
-              <p className="text-bodysm mt-1 whitespace-pre-line">{n.body}</p>
+              {editingId === n.id ? (
+                <div className="mt-1 space-y-2">
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    value={editingBody}
+                    onChange={(e) => setEditingBody(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        saveEdit();
+                      }
+                    }}
+                    className="w-full text-bodysm rounded-md border border-border bg-surface p-2 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={cancelEdit}
+                      className="h-7 px-2 text-caption text-ink-muted hover:text-ink"
+                    >
+                      Cancel
+                    </button>
+                    <Button
+                      onClick={saveEdit}
+                      disabled={
+                        editingBody.trim().length === 0 || update.isPending
+                      }
+                      className="h-7 min-w-[70px] text-caption"
+                    >
+                      {update.isPending ? 'Saving…' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-bodysm mt-1 whitespace-pre-line">{n.body}</p>
+              )}
             </div>
           ))
         )}

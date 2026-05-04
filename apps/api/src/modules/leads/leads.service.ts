@@ -303,6 +303,15 @@ export class LeadsService {
     return this.prisma.lead.update({ where: { id }, data: { validity } });
   }
 
+  async deleteStageHistoryEntry(leadId: string, entryId: string) {
+    const entry = await this.prisma.leadStageHistory.findFirst({
+      where: { id: entryId, leadId },
+    });
+    if (!entry) throw new NotFoundException('Stage history entry not found');
+    await this.prisma.leadStageHistory.delete({ where: { id: entryId } });
+    return { ok: true };
+  }
+
   private async assertExists(id: string) {
     const exists = await this.prisma.lead.findUnique({
       where: { id },

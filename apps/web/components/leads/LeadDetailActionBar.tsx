@@ -14,7 +14,6 @@ import { StagePicker } from './StagePicker';
 import {
   AlertTriangle,
   ArrowLeft,
-  Calendar,
   CheckCircle2,
   FileText,
   ImageIcon,
@@ -22,6 +21,7 @@ import {
   Phone,
   Plus,
   StickyNote,
+  Video,
 } from 'lucide-react';
 
 const SAVE_DEBOUNCE_MS = 300;
@@ -176,7 +176,7 @@ export function LeadDetailActionBar({
             <Phone size={14} />
           </ActionButton>
           <ActionButton title="Schedule meeting" onClick={onScheduleMeeting}>
-            <Calendar size={14} />
+            <Video size={14} />
           </ActionButton>
           <ActionButton title="Create follow-up" onClick={onCreateFollowup}>
             <Plus size={14} />

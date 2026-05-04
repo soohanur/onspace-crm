@@ -1,8 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { IsString, MinLength, MaxLength } from 'class-validator';
 import { NotesService } from './notes.service';
 
 class CreateNoteDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
+}
+
+class UpdateNoteDto {
   @IsString()
   @MinLength(1)
   @MaxLength(5000)
@@ -22,6 +37,15 @@ export class NotesController {
   @Post()
   create(@Param('leadId') leadId: string, @Body() dto: CreateNoteDto) {
     return this.notes.create(leadId, dto.body);
+  }
+
+  @Patch(':noteId')
+  update(
+    @Param('leadId') leadId: string,
+    @Param('noteId') noteId: string,
+    @Body() dto: UpdateNoteDto,
+  ) {
+    return this.notes.update(leadId, noteId, dto.body);
   }
 
   @Delete(':noteId')

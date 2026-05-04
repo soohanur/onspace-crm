@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '../ui/Button';
-import { StickyNote, Trash2, X } from 'lucide-react';
+import { Pencil, StickyNote, Trash2, X } from 'lucide-react';
 
 /**
- * Apple Notes-style modal: list of previous notes on the left/top,
- * a composer at the bottom. Auto-focuses the textarea when opened.
- * Cmd/Ctrl+Enter submits. Esc closes.
+ * Apple Notes-style modal: list of previous notes on top, composer at
+ * the bottom. Each note can be edited inline (click pencil) or deleted.
+ * Auto-focuses the composer when opened. Cmd/Ctrl+Enter submits, Esc closes.
  */
 export function NotesModal({
   leadId,
@@ -22,6 +22,8 @@ export function NotesModal({
 }) {
   const qc = useQueryClient();
   const [body, setBody] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: notes = [], isLoading } = useQuery({
@@ -30,36 +32,54 @@ export function NotesModal({
     enabled: open,
   });
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['notes', leadId] });
+    qc.invalidateQueries({ queryKey: ['lead-activity', leadId] });
+  };
+
   const create = useMutation({
     mutationFn: (text: string) => api.createNote(leadId, text),
     onSuccess: () => {
       setBody('');
-      qc.invalidateQueries({ queryKey: ['notes', leadId] });
-      qc.invalidateQueries({ queryKey: ['lead-activity', leadId] });
+      invalidate();
       textareaRef.current?.focus();
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      api.updateNote(leadId, id, text),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditingBody('');
+      invalidate();
     },
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteNote(leadId, id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notes', leadId] });
-      qc.invalidateQueries({ queryKey: ['lead-activity', leadId] });
-    },
+    onSuccess: invalidate,
   });
 
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => textareaRef.current?.focus(), 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (editingId) {
+          setEditingId(null);
+          setEditingBody('');
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => {
       clearTimeout(t);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose]);
+  }, [open, onClose, editingId]);
 
   if (!open) return null;
 
@@ -67,6 +87,19 @@ export function NotesModal({
   const submit = () => {
     if (!canSubmit) return;
     create.mutate(body.trim());
+  };
+
+  const startEdit = (id: string, current: string) => {
+    setEditingId(id);
+    setEditingBody(current);
+  };
+  const saveEdit = () => {
+    if (!editingId || editingBody.trim().length === 0) return;
+    update.mutate({ id: editingId, text: editingBody.trim() });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingBody('');
   };
 
   return (
@@ -116,15 +149,61 @@ export function NotesModal({
                   <div className="text-caption font-mono font-tabular text-neutral">
                     {new Date(n.createdAt).toLocaleString()}
                   </div>
-                  <button
-                    onClick={() => remove.mutate(n.id)}
-                    className="opacity-0 group-hover:opacity-100 transition text-neutral hover:text-error"
-                    aria-label="Delete note"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  {editingId !== n.id && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => startEdit(n.id, n.body)}
+                        className="text-neutral hover:text-primary"
+                        aria-label="Edit note"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => remove.mutate(n.id)}
+                        className="text-neutral hover:text-error"
+                        aria-label="Delete note"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-bodysm mt-1 whitespace-pre-line">{n.body}</p>
+                {editingId === n.id ? (
+                  <div className="mt-1 space-y-2">
+                    <textarea
+                      autoFocus
+                      rows={3}
+                      value={editingBody}
+                      onChange={(e) => setEditingBody(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                          e.preventDefault();
+                          saveEdit();
+                        }
+                      }}
+                      className="w-full text-bodysm rounded-md border border-border bg-surface p-2 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={cancelEdit}
+                        className="h-7 px-2 text-caption text-ink-muted hover:text-ink"
+                      >
+                        Cancel
+                      </button>
+                      <Button
+                        onClick={saveEdit}
+                        disabled={
+                          editingBody.trim().length === 0 || update.isPending
+                        }
+                        className="h-7 min-w-[70px] text-caption"
+                      >
+                        {update.isPending ? 'Saving…' : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-bodysm mt-1 whitespace-pre-line">{n.body}</p>
+                )}
               </div>
             ))
           )}
