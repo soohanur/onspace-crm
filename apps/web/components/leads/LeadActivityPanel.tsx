@@ -229,7 +229,7 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
             return (
               <li key={t.entryId} className="relative group">
                 <span
-                  className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-primary -translate-x-[2.5px]"
+                  className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-primary -translate-x-[20px]"
                   aria-hidden
                 />
                 <div className="flex items-start gap-2">
@@ -303,7 +303,7 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
               anchor of every duration calc above. */}
           <li className="relative">
             <span
-              className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-neutral -translate-x-[2.5px]"
+              className="absolute left-0 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-neutral -translate-x-[20px]"
               aria-hidden
             />
             <div className="flex items-start gap-2">
