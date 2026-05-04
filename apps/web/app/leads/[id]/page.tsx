@@ -134,10 +134,10 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      {/* All per-lead activity — emails, calls, meetings, tasks, proposals,
-          notes, sequences — lives here. The modals above mutate; this
-          panel reflects every change in the timeline. */}
-      <LeadActivityPanel leadId={id} onOpenEmail={setOpenedEmailId} />
+      {/* Tabbed surface — Stage / Emails / Calls / Meetings / Tasks /
+          Proposals / Notes / Sequences. Each tab renders the existing
+          CRUD panel so creates/edits/deletes still work. */}
+      <LeadActivityPanel lead={data} onOpenEmail={setOpenedEmailId} />
 
       {/* Modals */}
       <SendEmailDialog
