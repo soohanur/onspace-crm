@@ -6,7 +6,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import {
   api,
   CreateCallInput,
@@ -20,14 +20,8 @@ import { LeadContactCard } from '@/components/leads/LeadContactCard';
 import { LeadSocialCard } from '@/components/leads/LeadSocialCard';
 import { LeadSourceCard } from '@/components/leads/LeadSourceCard';
 import { LeadAlertCard } from '@/components/leads/LeadAlertCard';
-import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
-import { LeadTasksPanel } from '@/components/leads/LeadTasksPanel';
-import { LeadMeetingsPanel } from '@/components/leads/LeadMeetingsPanel';
-import { LeadProposalsPanel } from '@/components/leads/LeadProposalsPanel';
-import { LeadCallsPanel } from '@/components/leads/LeadCallsPanel';
-import { LeadSequencesPanel } from '@/components/leads/LeadSequencesPanel';
 import { LeadActivityPanel } from '@/components/leads/LeadActivityPanel';
-import { LeadEmailHistory } from '@/components/leads/LeadEmailHistory';
+import { NotesModal } from '@/components/leads/NotesModal';
 import { SendEmailDialog } from '@/components/leads/SendEmailDialog';
 import { EmailDetailDrawer } from '@/components/leads/EmailDetailDrawer';
 import { CallFormModal } from '@/components/calls/CallFormModal';
@@ -50,6 +44,7 @@ export default function LeadDetailPage({
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['lead', id],
@@ -58,6 +53,7 @@ export default function LeadDetailPage({
 
   const invalidateLead = () => {
     qc.invalidateQueries({ queryKey: ['lead', id] });
+    qc.invalidateQueries({ queryKey: ['lead-activity', id] });
   };
 
   const createCall = useMutation({
@@ -86,6 +82,14 @@ export default function LeadDetailPage({
     },
   });
 
+  // Action bar dispatches `lead:add-note`; opening the modal here keeps the
+  // bar a pure presentational component with no modal state.
+  useEffect(() => {
+    const onAdd = () => setNotesOpen(true);
+    window.addEventListener('lead:add-note', onAdd);
+    return () => window.removeEventListener('lead:add-note', onAdd);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="max-w-[1280px] mx-auto px-6 py-6">
@@ -112,12 +116,12 @@ export default function LeadDetailPage({
         onScheduleMeeting={() => setMeetingOpen(true)}
         onCreateFollowup={() => setTaskOpen(true)}
         onSendProposal={() => setProposalOpen(true)}
-        onAddNote={() => window.dispatchEvent(new Event('lead:add-note'))}
+        onAddNote={() => setNotesOpen(true)}
       />
 
       {/* Bento grid: facts on the left, alerts + people on the right.
           Right column sticky on desktop so it follows the user as they
-          scroll the long left column. */}
+          scroll. */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5">
         <div className="space-y-5 min-w-0">
           <LeadOverviewCard lead={data} />
@@ -130,29 +134,9 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      {/* CRUD surfaces — mutate the underlying data */}
-      <div id="email-history">
-        <LeadEmailHistory leadId={id} onOpen={setOpenedEmailId} />
-      </div>
-      <div id="tasks">
-        <LeadTasksPanel lead={data} />
-      </div>
-      <div id="meetings">
-        <LeadMeetingsPanel lead={data} />
-      </div>
-      <div id="calls">
-        <LeadCallsPanel lead={data} />
-      </div>
-      <div id="proposals">
-        <LeadProposalsPanel lead={data} />
-      </div>
-      <div id="sequences">
-        <LeadSequencesPanel lead={data} />
-      </div>
-      <LeadNotesPanel leadId={id} />
-
-      {/* Read-only chronological log — last so it doesn't compete with
-          the actionable CRUD panels above. */}
+      {/* All per-lead activity — emails, calls, meetings, tasks, proposals,
+          notes, sequences — lives here. The modals above mutate; this
+          panel reflects every change in the timeline. */}
       <LeadActivityPanel leadId={id} onOpenEmail={setOpenedEmailId} />
 
       {/* Modals */}
@@ -207,6 +191,11 @@ export default function LeadDetailPage({
         accountId={null}
         onClose={() => setProposalOpen(false)}
         onSent={(_p: Proposal) => setProposalOpen(false)}
+      />
+      <NotesModal
+        leadId={id}
+        open={notesOpen}
+        onClose={() => setNotesOpen(false)}
       />
     </div>
   );

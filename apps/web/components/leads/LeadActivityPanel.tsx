@@ -377,7 +377,6 @@ function renderEvent(
           </>
         ),
         detail: event.notesPreview ?? undefined,
-        href: `/leads/${leadId}#calls`,
       };
     }
     case 'meeting_scheduled':
@@ -390,7 +389,6 @@ function renderEvent(
           </>
         ),
         detail: new Date(event.scheduledAt).toLocaleString(),
-        href: `/leads/${leadId}#meetings`,
       };
     case 'meeting_completed':
       return {
@@ -401,7 +399,6 @@ function renderEvent(
             <strong>Meeting completed</strong> · {event.meetingTitle}
           </>
         ),
-        href: `/leads/${leadId}#meetings`,
       };
     case 'meeting_cancelled':
       return {
@@ -412,7 +409,6 @@ function renderEvent(
             <strong>Meeting cancelled</strong> · {event.meetingTitle}
           </>
         ),
-        href: `/leads/${leadId}#meetings`,
       };
     case 'proposal_sent':
       return {
@@ -423,7 +419,6 @@ function renderEvent(
             <strong>Proposal sent</strong> · {event.subject}
           </>
         ),
-        href: `/leads/${leadId}#proposals`,
       };
     case 'task_created':
       return {
@@ -437,7 +432,6 @@ function renderEvent(
         detail: event.dueAt
           ? `Due ${new Date(event.dueAt).toLocaleDateString()}`
           : undefined,
-        href: `/leads/${leadId}#tasks`,
       };
     case 'task_completed':
       return {
@@ -448,7 +442,6 @@ function renderEvent(
             <strong>Task done</strong> · {event.taskTitle}
           </>
         ),
-        href: `/leads/${leadId}#tasks`,
       };
     case 'note_added':
       return {
@@ -456,7 +449,6 @@ function renderEvent(
         tone: 'neutral',
         headline: <strong>Note added</strong>,
         detail: event.bodyPreview,
-        href: `/leads/${leadId}#notes`,
       };
     case 'sequence_enrolled':
       return {
