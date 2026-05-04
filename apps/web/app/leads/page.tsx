@@ -5,24 +5,31 @@
 export const dynamic = 'force-dynamic';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { LeadsTable } from '@/components/LeadsTable';
-import { LeadFilterPanel } from '@/components/leads/LeadFilterPanel';
 import { LeadColumnToggle } from '@/components/leads/LeadColumnToggle';
 import { ViewToggle } from '@/components/leads/ViewToggle';
 import { AddToGroupMenu } from '@/components/groups/AddToGroupMenu';
 import { SaveAsSmartGroupButton } from '@/components/groups/SaveAsSmartGroupButton';
+import { LeadsFilterModal } from '@/components/leads/LeadsFilterModal';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
 import { useColumnPrefs } from '@/hooks/useColumnPrefs';
-import { filterToSearchParams } from '@/lib/filters';
-import { Trash2 } from 'lucide-react';
+import { activeFilterCount, filterToSearchParams } from '@/lib/filters';
+import { Filter, Search, Trash2, X } from 'lucide-react';
 
 export default function GlobalLeadsPage() {
   return (
-    <Suspense fallback={<div className="max-w-[1700px] mx-auto px-6 py-8 text-ink-muted">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="max-w-[1700px] mx-auto px-6 py-6 text-ink-muted">
+          Loading…
+        </div>
+      }
+    >
       <GlobalLeadsBody />
     </Suspense>
   );
@@ -30,11 +37,14 @@ export default function GlobalLeadsPage() {
 
 function GlobalLeadsBody() {
   const qc = useQueryClient();
-  const { filter } = useLeadsFilter();
+  const { filter, set } = useLeadsFilter();
   const { visible } = useColumnPrefs();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  const filterParams = Object.fromEntries(filterToSearchParams(filter).entries());
+  const filterParams = Object.fromEntries(
+    filterToSearchParams(filter).entries(),
+  );
 
   const { data: stats } = useQuery({
     queryKey: ['leads-stats-global', filterParams],
@@ -46,6 +56,11 @@ function GlobalLeadsBody() {
     queryKey: ['leads-global', filterParams],
     queryFn: () => api.listLeads({ ...filterParams, take: 200 }),
     refetchInterval: 3_000,
+  });
+
+  const { data: facets } = useQuery({
+    queryKey: ['facets'],
+    queryFn: api.facets,
   });
 
   const items = data?.items ?? [];
@@ -62,7 +77,6 @@ function GlobalLeadsBody() {
       refresh();
     },
   });
-
   const bulkDelete = useMutation({
     mutationFn: (ids: string[]) => api.bulkDeleteLeads(ids),
     onSuccess: () => {
@@ -83,16 +97,16 @@ function GlobalLeadsBody() {
   };
   const clearSelection = () => setSelected(new Set());
 
-  return (
-    <div className="max-w-[1700px] mx-auto px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-h1 mb-1">Global Leads</h1>
-        <p className="text-ink-muted text-bodysm">
-          All leads ever scraped, across every search.
-        </p>
-      </div>
+  // Filter button badge counts only filters that aren't surfaced inline
+  // (search + category live in the toolbar above the modal trigger).
+  const totalActive = activeFilterCount(filter);
+  const inlineActive =
+    (filter.q ? 1 : 0) + (filter.category ? 1 : 0);
+  const modalActive = Math.max(0, totalActive - inlineActive);
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+  return (
+    <div className="max-w-[1700px] mx-auto px-6 py-6 space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Total" value={stats?.total ?? 0} />
         <StatCard label="With Website" value={stats?.withWebsite ?? 0} />
         <StatCard label="With Email" value={stats?.withEmail ?? 0} />
@@ -100,76 +114,187 @@ function GlobalLeadsBody() {
         <StatCard label="With Social" value={stats?.withSocials ?? 0} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        <aside className="hidden lg:block min-w-0">
-          <LeadFilterPanel />
-        </aside>
-
-        <div className="min-w-0">
-          <Card className="p-0 overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex flex-wrap gap-3 items-center">
-              <div className="text-bodysm text-ink-muted font-tabular">
-                {isLoading ? 'Loading…' : `${items.length} shown`}
-                {selected.size > 0 && (
-                  <>
-                    {' · '}
-                    <button
-                      onClick={clearSelection}
-                      className="text-primary hover:underline"
-                    >
-                      {selected.size} selected (clear)
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="ml-auto flex gap-2 flex-wrap items-center">
-                <ViewToggle />
-                {selected.size > 0 && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `Delete ${selected.size} lead${selected.size === 1 ? '' : 's'}? This cannot be undone.`,
-                        )
-                      ) {
-                        bulkDelete.mutate(Array.from(selected));
-                      }
-                    }}
-                    className="!text-error !border-error hover:!bg-errorBg"
-                  >
-                    <Trash2 size={14} /> Delete ({selected.size})
-                  </Button>
-                )}
-                <SaveAsSmartGroupButton filter={filter} />
-                <AddToGroupMenu
-                  selectedIds={Array.from(selected)}
-                  onAdded={clearSelection}
-                />
-                <LeadColumnToggle />
-              </div>
-            </div>
-            <LeadsTable
-              leads={items}
-              visibleColumns={visible}
-              selectable
-              selectedIds={selected}
-              onToggleSelect={toggleSelect}
-              onToggleAll={toggleAll}
-              onDelete={(id) => deleteOne.mutate(id)}
+      <Card className="!p-0 overflow-hidden">
+        {/* Toolbar */}
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2">
+          <CategoryTypeahead
+            value={filter.category ?? ''}
+            onChange={(v) => set('category', v || undefined)}
+            options={facets?.categories ?? []}
+          />
+          <div className="relative flex-1 min-w-[200px]">
+            <Search
+              size={13}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral pointer-events-none"
             />
-          </Card>
+            <Input
+              placeholder="Search business, city, description…"
+              value={filter.q ?? ''}
+              onChange={(e) => set('q', e.target.value || undefined)}
+              className="!pl-9 !h-9"
+            />
+          </div>
+          <button
+            onClick={() => setFilterOpen(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-surface text-bodysm text-ink-muted hover:border-primary hover:text-primary"
+          >
+            <Filter size={13} />
+            Filters
+            {modalActive > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-5 px-1 rounded bg-primary text-white text-[10px] font-mono font-tabular">
+                {modalActive}
+              </span>
+            )}
+          </button>
+          <ViewToggle />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="text-caption text-ink-muted font-tabular">
+              {isLoading ? 'Loading…' : `${items.length} shown`}
+              {selected.size > 0 && (
+                <>
+                  {' · '}
+                  <button
+                    onClick={clearSelection}
+                    className="text-primary hover:underline"
+                  >
+                    {selected.size} selected (clear)
+                  </button>
+                </>
+              )}
+            </div>
+            {selected.size > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Delete ${selected.size} lead${selected.size === 1 ? '' : 's'}? This cannot be undone.`,
+                    )
+                  ) {
+                    bulkDelete.mutate(Array.from(selected));
+                  }
+                }}
+                className="!text-error !border-error hover:!bg-errorBg"
+              >
+                <Trash2 size={14} /> Delete ({selected.size})
+              </Button>
+            )}
+            <SaveAsSmartGroupButton filter={filter} />
+            <AddToGroupMenu
+              selectedIds={Array.from(selected)}
+              onAdded={clearSelection}
+            />
+            <LeadColumnToggle />
+          </div>
         </div>
-      </div>
+
+        <LeadsTable
+          leads={items}
+          visibleColumns={visible}
+          selectable
+          selectedIds={selected}
+          onToggleSelect={toggleSelect}
+          onToggleAll={toggleAll}
+          onDelete={(id) => deleteOne.mutate(id)}
+        />
+      </Card>
+
+      <LeadsFilterModal
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+      />
     </div>
   );
 }
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <Card>
-      <div className="text-caption uppercase tracking-wider text-neutral mb-2">{label}</div>
-      <div className="text-h1 font-mono font-tabular">{value.toLocaleString()}</div>
+    <Card className="!p-3">
+      <div className="text-caption uppercase tracking-wider text-neutral mb-1">
+        {label}
+      </div>
+      <div className="text-h2 font-mono font-tabular">
+        {value.toLocaleString()}
+      </div>
     </Card>
   );
 }
+
+function CategoryTypeahead({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const matches =
+    draft.length === 0
+      ? options.slice(0, 8)
+      : options
+          .filter((o) => o.toLowerCase().includes(draft.toLowerCase()))
+          .slice(0, 8);
+
+  return (
+    <div ref={wrapRef} className="relative w-[200px]">
+      <input
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setOpen(true);
+          if (e.target.value === '') onChange('');
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Any category"
+        className="h-9 w-full pl-2.5 pr-7 rounded-md border border-border bg-surface text-bodysm text-ink placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition truncate"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft('');
+            onChange('');
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral hover:text-error"
+          aria-label="Clear category"
+        >
+          <X size={12} />
+        </button>
+      )}
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 mt-1 bg-surface border border-border rounded-md shadow-e2 z-30 overflow-hidden max-h-[280px] overflow-y-auto scroll-thin">
+          {matches.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => {
+                setDraft(opt);
+                onChange(opt);
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 h-8 text-bodysm hover:bg-background truncate"
+              title={opt}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+

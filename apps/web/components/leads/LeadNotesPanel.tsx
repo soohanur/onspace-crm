@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card } from '../ui/Card';
@@ -11,6 +11,19 @@ import { StickyNote, Trash2 } from 'lucide-react';
 export function LeadNotesPanel({ leadId }: { leadId: string }) {
   const qc = useQueryClient();
   const [body, setBody] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Phase 19 — focus the input when the action bar's "Add note" button
+  // dispatches `lead:add-note`. Stays decoupled from the parent so the
+  // panel can move around without refactoring callers.
+  useEffect(() => {
+    const onFocus = () => {
+      textareaRef.current?.focus();
+      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    window.addEventListener('lead:add-note', onFocus);
+    return () => window.removeEventListener('lead:add-note', onFocus);
+  }, []);
 
   const { data: notes = [] } = useQuery({
     queryKey: ['notes', leadId],
@@ -33,10 +46,11 @@ export function LeadNotesPanel({ leadId }: { leadId: string }) {
   const canSubmit = body.trim().length > 0 && !create.isPending;
 
   return (
-    <Card>
+    <Card id="notes">
       <SectionHeader icon={<StickyNote size={14} />} title={`Notes (${notes.length})`} />
 
       <textarea
+        ref={textareaRef}
         rows={3}
         placeholder="Add a note — what was said, decisions, next steps…"
         value={body}

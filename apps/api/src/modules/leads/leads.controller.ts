@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { LeadStage, LeadValidity } from '@onspace/db';
 import { LeadsService, LeadFilter, OrderBy } from './leads.service';
+import { LeadActivityService } from './lead-activity.service';
 
 const STAGE_VALUES = new Set<string>([
   'new',
@@ -31,7 +32,10 @@ const VALIDITY_VALUES = new Set<string>(['valid', 'invalid']);
 
 @Controller('leads')
 export class LeadsController {
-  constructor(private readonly leads: LeadsService) {}
+  constructor(
+    private readonly leads: LeadsService,
+    private readonly activity: LeadActivityService,
+  ) {}
 
   @Get()
   async list(@Query() q: Record<string, string>) {
@@ -46,6 +50,18 @@ export class LeadsController {
   @Get('facets')
   async facets() {
     return this.leads.facets();
+  }
+
+  @Get(':leadId/activity')
+  async leadActivity(
+    @Param('leadId') leadId: string,
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.activity.listForLead(leadId, {
+      days: days ? Number(days) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get(':id')

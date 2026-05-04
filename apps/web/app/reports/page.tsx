@@ -89,12 +89,9 @@ function Body() {
   }, [days]);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-6 py-8 space-y-5">
-      <header className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-h1 mb-1">Reports</h1>
-          <p className="text-ink-muted text-bodysm">{rangeLabel}</p>
-        </div>
+    <div className="max-w-[1280px] mx-auto px-6 py-6 space-y-4">
+      <header className="flex items-center justify-between flex-wrap gap-3">
+        <div className="text-caption text-ink-muted">{rangeLabel}</div>
         <div className="flex items-center gap-1 border border-border rounded-md bg-surface overflow-hidden">
           {DAY_OPTIONS.map((d) => (
             <button

@@ -284,6 +284,7 @@ model Lead {
   calls            Call[]
   campaignRecipients CampaignRecipient[]
   sequenceEnrollments SequenceEnrollment[]
+  stageHistory     LeadStageHistory[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
@@ -942,4 +943,30 @@ model SequenceEnrollmentSend {
   @@unique([enrollmentId, stepOrder])
   @@index([sentAt])
   @@map("sequence_enrollment_sends")
+}
+
+// ─── Phase 19: Lead stage history ─────────────────────────────────────────
+//
+// Append-only log of every stage transition. Lets the lead-detail
+// activity timeline render "moved from approached → engaged via
+// email_replied at HH:MM" entries. We don't backfill historical
+// transitions before this phase — they're unrecoverable.
+
+model LeadStageHistory {
+  id          String     @id @default(uuid())
+  leadId      String     @map("lead_id")
+  fromStage   LeadStage  @map("from_stage")
+  toStage     LeadStage  @map("to_stage")
+  /// 'manual' for user-driven UI changes; otherwise the existing Trigger
+  /// union from StageAutomationService (email_sent, email_opened, etc.).
+  trigger     String
+  /// Free-form attribution string until multi-tenant arrives.
+  actorLabel  String?    @map("actor_label")
+  occurredAt  DateTime   @default(now()) @map("occurred_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt])
+  @@index([occurredAt])
+  @@map("lead_stage_history")
 }

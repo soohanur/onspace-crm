@@ -76,17 +76,9 @@ function Body() {
   const clearSelection = () => setSelectedIds(new Set());
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-h1 mb-1">Contacts</h1>
-        <p className="text-ink-muted text-bodysm">
-          All structured contacts across every business in your CRM. Click
-          any row to open the parent lead.
-        </p>
-      </div>
-
+    <div className="max-w-[1400px] mx-auto px-6 py-6">
       {/* Stats strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <StatCard
           icon={<Users size={14} />}
           label="Total"

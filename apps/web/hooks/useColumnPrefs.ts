@@ -2,38 +2,51 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-// v4 → added Actions column (per-row Follow-up button). Bumping the
-// storage key resets users to the new defaults so the column shows up.
-const STORAGE_KEY = 'onspace.leads.columnPrefs.v4';
+// v5 — Phase 19: dense single-line rows + Source column. Bumping the
+// storage key forces every existing user onto the new default visible
+// set so the table loads dense by default.
+const STORAGE_KEY = 'onspace.leads.columnPrefs.v5';
 
 export const ALL_COLUMNS = [
   { key: 'business', label: 'Business' },
   { key: 'stage', label: 'Stage' },
+  { key: 'category', label: 'Category' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
   { key: 'score', label: 'Score' },
   { key: 'tasks', label: 'Tasks' },
-  { key: 'actions', label: 'Actions' },
-  { key: 'categories', label: 'Categories' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'email', label: 'Email' },
   { key: 'website', label: 'Website' },
+  { key: 'social', label: 'Social' },
   { key: 'address', label: 'Address' },
+  { key: 'source', label: 'Source' },
   { key: 'rating', label: 'Rating' },
   { key: 'years', label: 'Years' },
-  { key: 'social', label: 'Social' },
   { key: 'owner', label: 'Owner' },
   { key: 'yp', label: 'YP Listing' },
   { key: 'search', label: 'Search' },
+  { key: 'actions', label: 'Actions' },
 ] as const;
 
 export type ColumnKey = (typeof ALL_COLUMNS)[number]['key'];
 
 const DEFAULT_VISIBLE: ColumnKey[] = [
-  'business', 'stage', 'score', 'tasks', 'actions', 'categories', 'phone',
-  'email', 'website', 'address', 'rating', 'social', 'yp',
+  'business',
+  'stage',
+  'category',
+  'email',
+  'phone',
+  'score',
+  'tasks',
+  'website',
+  'social',
+  'address',
+  'source',
 ];
 
 export function useColumnPrefs() {
-  const [visible, setVisible] = useState<Set<ColumnKey>>(new Set(DEFAULT_VISIBLE));
+  const [visible, setVisible] = useState<Set<ColumnKey>>(
+    new Set(DEFAULT_VISIBLE),
+  );
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -53,7 +66,10 @@ export function useColumnPrefs() {
   const persist = useCallback((next: Set<ColumnKey>) => {
     setVisible(next);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Array.from(next)),
+      );
     }
   }, []);
 
@@ -67,7 +83,10 @@ export function useColumnPrefs() {
     [visible, persist],
   );
 
-  const reset = useCallback(() => persist(new Set(DEFAULT_VISIBLE)), [persist]);
+  const reset = useCallback(
+    () => persist(new Set(DEFAULT_VISIBLE)),
+    [persist],
+  );
 
   return { visible, toggle, reset, hydrated };
 }

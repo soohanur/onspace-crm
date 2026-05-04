@@ -254,10 +254,19 @@ export class LeadsService {
       return this.prisma.lead.findUnique({ where: { id } }) as Promise<any>;
     }
 
-    const updated = await this.prisma.lead.update({
+    // Route the manual change through applyStageChange so stage history
+    // gets logged with trigger='manual' alongside the lead update. The
+    // helper updates lead.stage + lead.stageChangedAt and writes to
+    // lead_stage_history (Phase 19) — a history failure can't bubble.
+    await this.stageAutomation.applyStageChange(
+      id,
+      existing.stage,
+      stage,
+      'manual',
+    );
+    const updated = (await this.prisma.lead.findUnique({
       where: { id },
-      data: { stage, stageChangedAt: new Date() },
-    });
+    })) as any;
 
     // Manual stage change side-effects (e.g. qualified -> auto-task).
     // Wrapped internally; never bubbles.

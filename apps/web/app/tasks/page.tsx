@@ -151,15 +151,8 @@ function TasksPageBody() {
   const items = data?.items ?? [];
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-h1 mb-1">Tasks / Follow-ups</h1>
-          <p className="text-ink-muted text-bodysm">
-            Manual tasks across all leads. Auto-created follow-ups arrive
-            with the rule engine in a later phase.
-          </p>
-        </div>
+    <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <div className="flex items-center justify-end mb-4">
         <Button onClick={() => setModalOpen({ mode: 'create' })}>
           <Plus size={14} /> New task
         </Button>

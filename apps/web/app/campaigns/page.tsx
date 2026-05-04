@@ -79,16 +79,8 @@ function Body() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-h1 mb-1">Campaigns</h1>
-          <p className="text-ink-muted text-bodysm">
-            Bulk-send templated emails to a lead group with per-account
-            throttling. Tracking, replies, and stage automation work the
-            same as one-off sends.
-          </p>
-        </div>
+    <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <div className="mb-4 flex items-center justify-end flex-wrap gap-3">
         {tab === 'campaigns' ? (
           <Link href="/campaigns/new">
             <Button>

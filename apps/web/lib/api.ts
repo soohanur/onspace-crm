@@ -737,6 +737,96 @@ export type DashboardEvent =
       subject: string;
     };
 
+// ─── Phase 19: Lead activity timeline ────────────────────────────────────
+
+export type LeadActivityEvent =
+  | { kind: 'lead_created'; at: string; leadName: string }
+  | {
+      kind: 'stage_changed';
+      at: string;
+      fromStage: LeadStage;
+      toStage: LeadStage;
+      trigger: string;
+      actorLabel: string | null;
+    }
+  | {
+      kind: 'email_sent';
+      at: string;
+      emailLogId: string;
+      subject: string;
+      campaignId: string | null;
+      campaignName: string | null;
+      sequenceId: string | null;
+      sequenceName: string | null;
+    }
+  | {
+      kind: 'email_opened';
+      at: string;
+      emailLogId: string;
+      subject: string;
+    }
+  | {
+      kind: 'email_replied';
+      at: string;
+      emailLogId: string;
+      snippet: string | null;
+      fromEmail: string | null;
+    }
+  | {
+      kind: 'call_logged';
+      at: string;
+      callId: string;
+      direction: CallDirection;
+      outcome: CallOutcome | null;
+      durationSec: number | null;
+      notesPreview: string | null;
+    }
+  | {
+      kind: 'meeting_scheduled';
+      at: string;
+      meetingId: string;
+      meetingTitle: string;
+      scheduledAt: string;
+      type: MeetingType;
+    }
+  | {
+      kind: 'meeting_completed';
+      at: string;
+      meetingId: string;
+      meetingTitle: string;
+    }
+  | {
+      kind: 'meeting_cancelled';
+      at: string;
+      meetingId: string;
+      meetingTitle: string;
+    }
+  | { kind: 'proposal_sent'; at: string; proposalId: string; subject: string }
+  | {
+      kind: 'task_created';
+      at: string;
+      taskId: string;
+      taskTitle: string;
+      context: string;
+      dueAt: string | null;
+    }
+  | { kind: 'task_completed'; at: string; taskId: string; taskTitle: string }
+  | { kind: 'note_added'; at: string; noteId: string; bodyPreview: string }
+  | {
+      kind: 'sequence_enrolled';
+      at: string;
+      sequenceId: string;
+      sequenceName: string;
+    }
+  | {
+      kind: 'sequence_exited';
+      at: string;
+      sequenceId: string;
+      sequenceName: string;
+      exitReason: string | null;
+    }
+  | { kind: 'campaign_added'; at: string; campaignId: string; campaignName: string };
+
 // ─── Phase 18: Sequences ─────────────────────────────────────────────────
 
 export type SequenceStatus = 'draft' | 'active' | 'paused' | 'archived';
@@ -1666,6 +1756,20 @@ export const api = {
       '/sequences/run',
       { method: 'POST' },
     ),
+
+  // ─── Phase 19: Lead activity timeline ─────────────────────────────────
+  getLeadActivity: (
+    leadId: string,
+    params: { days?: number; limit?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.days !== undefined) qs.set('days', String(params.days));
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    const suffix = qs.toString();
+    return request<LeadActivityEvent[]>(
+      `/leads/${leadId}/activity${suffix ? `?${suffix}` : ''}`,
+    );
+  },
 };
 
 function buildContactsQuery(params: GlobalContactsFilter): URLSearchParams {

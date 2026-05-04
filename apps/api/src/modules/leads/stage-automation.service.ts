@@ -126,6 +126,17 @@ export class StageAutomationService {
       where: { id: leadId },
       data: { stage: toStage, stageChangedAt: new Date() },
     });
+    // Phase 19 — append-only stage history. Wrapped in try/catch so a
+    // history-table failure never bubbles into the parent transition.
+    try {
+      await this.prisma.leadStageHistory.create({
+        data: { leadId, fromStage, toStage, trigger },
+      });
+    } catch (err) {
+      this.log.warn(
+        `stage history insert failed for ${leadId}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
     this.log.log(
       `[stage] lead=${leadId} ${fromStage} -> ${toStage} via=${trigger}`,
     );

@@ -31,8 +31,10 @@ import { useLeadsFilter } from '@/hooks/useLeadsFilter';
 import { filterToSearchParams } from '@/lib/filters';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LeadFilterPanel } from '@/components/leads/LeadFilterPanel';
+import { LeadsFilterModal } from '@/components/leads/LeadsFilterModal';
 import { ViewToggle } from '@/components/leads/ViewToggle';
+import { Filter } from 'lucide-react';
+import { activeFilterCount } from '@/lib/filters';
 import { SaveAsSmartGroupButton } from '@/components/groups/SaveAsSmartGroupButton';
 import { StageColumn } from '@/components/lead-stage/StageColumn';
 import { LeadCard } from '@/components/lead-stage/LeadCard';
@@ -167,56 +169,52 @@ function LeadStageBody() {
 
   // Drawer state.
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterCount = activeFilterCount(filter);
 
   return (
-    <div className="max-w-[1700px] mx-auto px-6 py-8">
-      <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-h1 mb-1">Lead Stage Pipeline</h1>
-          <p className="text-ink-muted text-bodysm">
-            Drag cards to update each lead's stage. Tap the tasks icon to
-            open follow-ups without leaving the board.
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-2">
+    <div className="max-w-[1700px] mx-auto px-6 py-6 space-y-4">
+      <Card className="!p-0 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex flex-wrap gap-2 items-center">
+          <button
+            onClick={() => setFilterOpen(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-surface text-bodysm text-ink-muted hover:border-primary hover:text-primary"
+          >
+            <Filter size={13} />
+            Filters
+            {filterCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-5 px-1 rounded bg-primary text-white text-[10px] font-mono font-tabular">
+                {filterCount}
+              </span>
+            )}
+          </button>
           <ViewToggle />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        <aside className="hidden lg:block min-w-0">
-          <LeadFilterPanel />
-        </aside>
-
-        <div className="min-w-0">
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex flex-wrap gap-3 items-center">
-              <div className="text-bodysm text-ink-muted font-tabular">
-                {isLoading
-                  ? 'Loading…'
-                  : `Showing ${total.toLocaleString()} lead${total === 1 ? '' : 's'} across ${LEAD_STAGES.length} stages`}
-                {data && total >= PAGE_SIZE && (
-                  <span className="ml-2 text-warning">
-                    (capped — narrow filters or use the table view to see more)
-                  </span>
-                )}
-              </div>
-              <div className="ml-auto flex gap-2 flex-wrap items-center">
-                <SaveAsSmartGroupButton filter={filter} />
-                <Button
-                  variant="secondary"
-                  onClick={() => refetch()}
-                  className="!h-9 !min-w-0 !px-3"
-                  disabled={isFetching}
-                  title="Refresh"
-                >
-                  <RefreshCcw
-                    size={14}
-                    className={isFetching ? 'animate-spin' : undefined}
-                  />
-                </Button>
-              </div>
+          <div className="ml-auto flex gap-2 flex-wrap items-center">
+            <div className="text-caption text-ink-muted font-tabular">
+              {isLoading
+                ? 'Loading…'
+                : `${total.toLocaleString()} lead${total === 1 ? '' : 's'}`}
+              {data && total >= PAGE_SIZE && (
+                <span className="ml-2 text-warning">
+                  (capped at {PAGE_SIZE} — narrow filters)
+                </span>
+              )}
             </div>
+            <SaveAsSmartGroupButton filter={filter} />
+            <Button
+              variant="secondary"
+              onClick={() => refetch()}
+              className="!h-9 !min-w-0 !px-3"
+              disabled={isFetching}
+              title="Refresh"
+            >
+              <RefreshCcw
+                size={14}
+                className={isFetching ? 'animate-spin' : undefined}
+              />
+            </Button>
+          </div>
+        </div>
 
             <DndContext
               sensors={sensors}
@@ -239,21 +237,21 @@ function LeadStageBody() {
                 </div>
               </div>
 
-              <DragOverlay dropAnimation={null}>
-                {draggingLead ? (
-                  <div className="rotate-1">
-                    <LeadCard
-                      lead={draggingLead}
-                      openTaskCount={taskCounts?.[draggingLead.id] ?? 0}
-                      onOpenTasks={() => {}}
-                    />
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          </Card>
-        </div>
-      </div>
+          <DragOverlay dropAnimation={null}>
+            {draggingLead ? (
+              <div className="rotate-1">
+                <LeadCard
+                  lead={draggingLead}
+                  openTaskCount={taskCounts?.[draggingLead.id] ?? 0}
+                  onOpenTasks={() => {}}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </Card>
+
+      <LeadsFilterModal open={filterOpen} onClose={() => setFilterOpen(false)} />
 
       {/* Tasks drawer */}
       <LeadTasksDrawer

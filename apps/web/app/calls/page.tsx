@@ -171,34 +171,23 @@ function Body() {
   const items = data?.items ?? [];
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-h1 mb-1">Call Center</h1>
-          <p className="text-ink-muted text-bodysm">
-            Manual call logging — record outbound and inbound calls, schedule
-            future ones, and let the funnel react automatically. Phone
-            integration ships in a later phase; for now the dial button
-            opens your default dialer.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() =>
-              setModal({ mode: 'create', defaultStatus: 'scheduled' })
-            }
-          >
-            <CalendarPlus size={14} /> Schedule a call
-          </Button>
-          <Button
-            onClick={() =>
-              setModal({ mode: 'create', defaultStatus: 'completed' })
-            }
-          >
-            <Plus size={14} /> Log a call
-          </Button>
-        </div>
+    <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
+        <Button
+          variant="secondary"
+          onClick={() =>
+            setModal({ mode: 'create', defaultStatus: 'scheduled' })
+          }
+        >
+          <CalendarPlus size={14} /> Schedule a call
+        </Button>
+        <Button
+          onClick={() =>
+            setModal({ mode: 'create', defaultStatus: 'completed' })
+          }
+        >
+          <Plus size={14} /> Log a call
+        </Button>
       </div>
 
       {/* Tabs */}

@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { Columns3, Table } from 'lucide-react';
 
@@ -9,48 +8,71 @@ const TABLE_PATH = '/leads';
 const PIPELINE_PATH = '/lead-stage';
 
 /**
- * Two-icon toggle that swaps between the leads table view and the kanban
- * pipeline view. Preserves the current query string so a filtered view
- * carries over when the user switches.
+ * Two-icon toggle that swaps between the leads table view and the
+ * kanban pipeline view. Preserves the current query string so a
+ * filtered view carries over when the user switches.
+ *
+ * Phase 19 — switched from <Link> to programmatic navigation so the
+ * search-params snapshot is always current at click time, and the
+ * already-active button disables itself instead of rendering as a
+ * no-op anchor.
  */
 export function ViewToggle() {
+  const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const qs = sp.toString();
-  const tableHref = qs ? `${TABLE_PATH}?${qs}` : TABLE_PATH;
-  const pipelineHref = qs ? `${PIPELINE_PATH}?${qs}` : PIPELINE_PATH;
 
-  const activeTable = pathname === TABLE_PATH;
-  const activePipeline = pathname === PIPELINE_PATH;
+  // Treat any `/leads` path (including `/leads/<id>`) as the table side
+  // so the toggle keeps a sensible active state on lead detail.
+  const onTable =
+    pathname === TABLE_PATH || pathname.startsWith(`${TABLE_PATH}/`);
+  const onPipeline = pathname === PIPELINE_PATH;
+
+  const go = (target: string) => {
+    if (
+      (target === TABLE_PATH && pathname === TABLE_PATH) ||
+      (target === PIPELINE_PATH && pathname === PIPELINE_PATH)
+    ) {
+      return;
+    }
+    const qs = sp.toString();
+    router.push(qs ? `${target}?${qs}` : target);
+  };
 
   return (
-    <div className="inline-flex border border-border rounded-md overflow-hidden h-9">
-      <Link
-        href={tableHref}
+    <div
+      className="inline-flex border border-border rounded-md overflow-hidden h-9"
+      role="group"
+      aria-label="View toggle"
+    >
+      <button
+        type="button"
+        onClick={() => go(TABLE_PATH)}
         title="Table view"
+        aria-pressed={onTable}
         className={clsx(
           'px-2.5 inline-flex items-center justify-center transition-colors',
-          activeTable
+          onTable
             ? 'bg-primary text-white'
-            : 'bg-surface text-ink-muted hover:bg-background',
+            : 'bg-surface text-ink-muted hover:bg-background hover:text-primary',
         )}
-        aria-current={activeTable ? 'page' : undefined}
       >
         <Table size={14} />
-      </Link>
-      <Link
-        href={pipelineHref}
+      </button>
+      <button
+        type="button"
+        onClick={() => go(PIPELINE_PATH)}
         title="Pipeline view"
+        aria-pressed={onPipeline}
         className={clsx(
           'px-2.5 inline-flex items-center justify-center transition-colors border-l border-border',
-          activePipeline
+          onPipeline
             ? 'bg-primary text-white'
-            : 'bg-surface text-ink-muted hover:bg-background',
+            : 'bg-surface text-ink-muted hover:bg-background hover:text-primary',
         )}
-        aria-current={activePipeline ? 'page' : undefined}
       >
         <Columns3 size={14} />
-      </Link>
+      </button>
     </div>
   );
 }

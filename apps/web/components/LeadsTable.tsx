@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, CreateTaskInput, Lead, Task } from '@/lib/api';
 import { groupSocials } from '@/lib/social';
@@ -12,19 +12,18 @@ import { Chip } from './ui/Chip';
 import { StageBadge } from './leads/StageBadge';
 import { TaskFormModal } from './tasks/TaskFormModal';
 import {
+  CheckCircle2,
   ExternalLink,
   Globe,
-  Mail,
-  Phone,
-  Linkedin,
-  Star,
-  MapPin,
-  Search as SearchIcon,
-  CheckCircle2,
   Image as ImageIcon,
-  FileText,
-  Trash2,
+  Linkedin,
+  Mail,
+  MapPin,
+  Phone,
   Plus,
+  Search as SearchIcon,
+  Star,
+  Trash2,
 } from 'lucide-react';
 
 /** Returns a Set of lead IDs added since the last render — used to highlight new rows. */
@@ -70,8 +69,6 @@ export function LeadsTable({
   const newIds = useNewIds(leads);
   const isVisible = (k: ColumnKey) => !visibleColumns || visibleColumns.has(k);
 
-  // Bulk-fetch open task counts for the visible rows. One round-trip per
-  // page render (keyed by the joined ID list) instead of per-row N+1.
   const taskColumnVisible = isVisible('tasks');
   const idsKey = useMemo(
     () => leads.map((l) => l.id).sort().join(','),
@@ -84,7 +81,6 @@ export function LeadsTable({
     refetchInterval: 30_000,
   });
 
-  // Per-row "Follow-up" modal — only one open at a time, keyed by lead.
   const [followupLead, setFollowupLead] = useState<Lead | null>(null);
   const createTask = useMutation({
     mutationFn: (input: CreateTaskInput) => api.createTask(input),
@@ -108,7 +104,7 @@ export function LeadsTable({
   }
 
   return (
-    <div className="overflow-auto scroll-thin max-h-[72vh]">
+    <div className="overflow-auto scroll-thin">
       <table className="min-w-[1500px] w-full text-bodysm">
         <thead className="bg-background sticky top-0 z-10">
           <tr className="text-caption uppercase tracking-[0.06em] text-neutral text-left">
@@ -117,7 +113,11 @@ export function LeadsTable({
                 <input
                   type="checkbox"
                   className="accent-primary"
-                  checked={!!selectedIds && leads.length > 0 && leads.every((l) => selectedIds.has(l.id))}
+                  checked={
+                    !!selectedIds &&
+                    leads.length > 0 &&
+                    leads.every((l) => selectedIds.has(l.id))
+                  }
                   onChange={() => onToggleAll?.()}
                   aria-label="Select all"
                 />
@@ -125,20 +125,21 @@ export function LeadsTable({
             )}
             {isVisible('business') && <Th>Business</Th>}
             {isVisible('stage') && <Th>Stage</Th>}
-            {isVisible('score') && <Th className="text-right">Score</Th>}
-            {isVisible('tasks') && <Th>Tasks</Th>}
-            {isVisible('actions') && <Th>{''}</Th>}
-            {isVisible('categories') && <Th>Categories</Th>}
-            {isVisible('phone') && <Th>Phone</Th>}
+            {isVisible('category') && <Th>Category</Th>}
             {isVisible('email') && <Th>Email</Th>}
+            {isVisible('phone') && <Th>Phone</Th>}
+            {isVisible('score') && <Th align="right">Score</Th>}
+            {isVisible('tasks') && <Th>Tasks</Th>}
             {isVisible('website') && <Th>Website</Th>}
+            {isVisible('social') && <Th>Social</Th>}
             {isVisible('address') && <Th>Address</Th>}
+            {isVisible('source') && <Th>Source</Th>}
             {isVisible('rating') && <Th>Rating</Th>}
             {isVisible('years') && <Th>Years</Th>}
-            {isVisible('social') && <Th>Social</Th>}
             {isVisible('owner') && <Th>Owner</Th>}
-            {isVisible('yp') && <Th>YP Listing</Th>}
+            {isVisible('yp') && <Th>YP</Th>}
             {isVisible('search') && <Th>Search</Th>}
+            {isVisible('actions') && <Th>{''}</Th>}
             {onDelete && <Th>{''}</Th>}
           </tr>
         </thead>
@@ -147,7 +148,7 @@ export function LeadsTable({
             <tr
               key={l.id}
               className={
-                'group border-t border-border hover:bg-background transition-colors ' +
+                'group border-t border-border hover:bg-background transition-colors h-[44px] ' +
                 (newIds.has(l.id) ? 'animate-row-flash' : '')
               }
             >
@@ -162,274 +163,275 @@ export function LeadsTable({
                   />
                 </Td>
               )}
-              {isVisible('business') && <Td>
-                <div className="flex items-start gap-2">
-                  {l.logoUrl ? (
-                    <img
-                      src={l.logoUrl}
-                      alt=""
-                      className="w-8 h-8 rounded object-cover bg-background border border-border shrink-0"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded bg-background border border-border flex items-center justify-center shrink-0">
-                      <ImageIcon size={14} className="text-neutral" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
+              {isVisible('business') && (
+                <Td>
+                  <div className="flex items-center gap-2 max-w-[280px]">
+                    {l.logoUrl ? (
+                      <img
+                        src={l.logoUrl}
+                        alt=""
+                        className="w-6 h-6 rounded object-cover bg-background border border-border shrink-0"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded bg-background border border-border flex items-center justify-center shrink-0">
+                        <ImageIcon size={12} className="text-neutral" />
+                      </div>
+                    )}
                     <Link
                       href={`/leads/${l.id}`}
-                      className="font-medium text-ink hover:text-primary truncate max-w-[260px] flex items-center gap-1"
+                      className="font-medium text-ink hover:text-primary truncate inline-flex items-center gap-1 min-w-0"
+                      title={l.businessName}
                     >
-                      {l.businessName}
+                      <span className="truncate">{l.businessName}</span>
                       {l.claimed && (
                         <CheckCircle2
-                          size={12}
+                          size={11}
                           className="text-primary shrink-0"
                           aria-label="Claimed"
                         />
                       )}
                     </Link>
-                    {l.description && (
-                      <div className="text-caption text-neutral truncate max-w-[280px]">
-                        {l.description}
-                      </div>
-                    )}
                   </div>
-                </div>
-              </Td>}
-              {isVisible('stage') && <Td>
-                <StageBadge stage={l.stage} />
-              </Td>}
-              {isVisible('score') && <Td>
-                <div className="text-right font-mono font-tabular tabular-nums">
-                  {l.score}
-                </div>
-              </Td>}
-              {isVisible('tasks') && <Td>
-                <TaskCountBadge count={taskCounts?.[l.id] ?? 0} />
-              </Td>}
-              {isVisible('actions') && <Td>
-                <button
-                  onClick={() => setFollowupLead(l)}
-                  className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border text-caption text-ink-muted hover:border-primary hover:text-primary transition-colors"
-                  title="Add follow-up task for this lead"
-                >
-                  <Plus size={11} /> Follow-up
-                </button>
-              </Td>}
-              {isVisible('categories') && <Td>
-                {l.category ? (
-                  <div className="space-y-1 max-w-[220px]">
-                    <Chip tone="neutral">{l.category}</Chip>
-                    {l.categories.length > 1 && (
-                      <div className="text-caption text-neutral">
-                        +{l.categories.length - 1} more
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('phone') && <Td>
-                {l.phone ? (
-                  <div>
-                    <span className="font-mono font-tabular flex items-center gap-1.5">
-                      <Phone size={12} className="text-neutral" />
-                      {l.phone}
+                </Td>
+              )}
+              {isVisible('stage') && (
+                <Td>
+                  <StageBadge stage={l.stage} />
+                </Td>
+              )}
+              {isVisible('category') && (
+                <Td>
+                  {l.category ? (
+                    <span
+                      className="inline-flex items-center gap-1 max-w-[200px]"
+                      title={
+                        l.categories.length > 1
+                          ? l.categories.join(', ')
+                          : l.category
+                      }
+                    >
+                      <Chip tone="neutral" className="!h-5 !text-[11px] truncate">
+                        {l.category}
+                      </Chip>
+                      {l.categories.length > 1 && (
+                        <span className="text-caption text-neutral shrink-0">
+                          +{l.categories.length - 1}
+                        </span>
+                      )}
                     </span>
-                    {l.phones.length > 1 && (
-                      <div className="text-caption text-neutral mt-0.5">
-                        +{l.phones.length - 1} alt
-                      </div>
-                    )}
-                    {l.fax && (
-                      <div className="text-caption text-neutral mt-0.5 font-mono">
-                        Fax: {l.fax}
-                      </div>
-                    )}
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('email') && (
+                <Td>
+                  {l.email ? (
+                    <a
+                      href={`mailto:${l.email}`}
+                      className="text-primary hover:underline inline-flex items-center gap-1.5 truncate max-w-[220px]"
+                      title={
+                        l.emails.length > 1
+                          ? l.emails.join(', ')
+                          : l.email
+                      }
+                    >
+                      <Mail size={11} className="text-neutral shrink-0" />
+                      <span className="truncate">{l.email}</span>
+                      {l.emails.length > 1 && (
+                        <span className="text-caption text-neutral shrink-0">
+                          +{l.emails.length - 1}
+                        </span>
+                      )}
+                    </a>
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('phone') && (
+                <Td>
+                  {l.phone ? (
+                    <a
+                      href={`tel:${l.phone.replace(/[^+\d]/g, '')}`}
+                      className="font-mono font-tabular inline-flex items-center gap-1.5 hover:text-primary"
+                      title={
+                        l.phones.length > 1
+                          ? l.phones.join('\n')
+                          : l.phone
+                      }
+                    >
+                      <Phone size={11} className="text-neutral shrink-0" />
+                      <span className="truncate">{l.phone}</span>
+                      {l.phones.length > 1 && (
+                        <span className="text-caption text-neutral shrink-0">
+                          +{l.phones.length - 1}
+                        </span>
+                      )}
+                    </a>
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('score') && (
+                <Td>
+                  <div className="text-right font-mono font-tabular tabular-nums">
+                    {l.score}
                   </div>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('email') && <Td>
-                {l.emails.length > 0 ? (
-                  <div className="space-y-0.5">
-                    {l.emails.slice(0, 3).map((em) => (
-                      <a
-                        key={em}
-                        href={`mailto:${em}`}
-                        className="text-primary hover:underline flex items-center gap-1.5 truncate max-w-[240px]"
-                      >
-                        <Mail size={12} />
-                        {em}
-                      </a>
-                    ))}
-                    {l.emails.length > 3 && (
-                      <div className="text-caption text-neutral">
-                        +{l.emails.length - 3} more
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('website') && <Td>
-                {l.website ? (
-                  <div className="space-y-0.5">
+                </Td>
+              )}
+              {isVisible('tasks') && (
+                <Td>
+                  <TaskCountBadge count={taskCounts?.[l.id] ?? 0} />
+                </Td>
+              )}
+              {isVisible('website') && (
+                <Td>
+                  {l.website ? (
                     <a
                       href={l.website}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-primary hover:underline flex items-center gap-1.5 truncate max-w-[220px]"
+                      className="text-primary hover:underline inline-flex items-center gap-1.5 truncate max-w-[200px]"
+                      title={l.website}
                     >
-                      <Globe size={12} />
-                      {prettyHost(l.website)}
-                      <ExternalLink size={10} />
+                      <Globe size={11} className="shrink-0" />
+                      <span className="truncate">{prettyHost(l.website)}</span>
+                      <ExternalLink size={9} className="text-neutral shrink-0" />
                     </a>
-                    {l.otherLinks.slice(0, 2).map((u) => (
-                      <a
-                        key={u}
-                        href={u}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block text-caption text-ink-muted hover:text-primary truncate max-w-[220px]"
-                      >
-                        {prettyHost(u)}
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <Chip tone="neutral">No website</Chip>
-                )}
-              </Td>}
-              {isVisible('address') && <Td>
-                {l.address ? (
-                  <div className="text-bodysm">
-                    <div className="flex items-start gap-1">
-                      <MapPin size={12} className="mt-0.5 text-neutral shrink-0" />
-                      <div className="truncate max-w-[220px]">{l.address}</div>
-                    </div>
-                    <div className="text-caption text-neutral pl-4">
-                      {[l.city, l.state, l.postalCode].filter(Boolean).join(', ')}
-                    </div>
-                    {l.neighborhoods.length > 0 && (
-                      <div className="text-caption text-neutral pl-4 mt-0.5">
-                        {l.neighborhoods.slice(0, 2).join(' · ')}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('rating') && <Td>
-                {l.rating !== null ? (
-                  <div className="flex items-center gap-1 font-mono font-tabular">
-                    <Star size={12} className="text-warning fill-warning" />
-                    {l.rating.toFixed(1)}
-                    {l.reviewCount !== null && (
-                      <span className="text-caption text-neutral">
-                        ({l.reviewCount})
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('social') && (
+                <Td>
+                  <SocialIcons socials={l.socials} />
+                </Td>
+              )}
+              {isVisible('address') && (
+                <Td>
+                  {l.address ? (
+                    <span
+                      className="inline-flex items-center gap-1 truncate max-w-[240px] text-ink-muted"
+                      title={[
+                        l.address,
+                        [l.city, l.state, l.postalCode].filter(Boolean).join(', '),
+                      ]
+                        .filter(Boolean)
+                        .join('\n')}
+                    >
+                      <MapPin size={11} className="text-neutral shrink-0" />
+                      <span className="truncate">
+                        {[l.city, l.state].filter(Boolean).join(', ') ||
+                          l.address}
                       </span>
-                    )}
-                  </div>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('years') && <Td>
-                <div className="space-y-0.5">
-                  {l.yearEstablished && (
-                    <div className="font-mono font-tabular">Est {l.yearEstablished}</div>
+                    </span>
+                  ) : (
+                    <Dash />
                   )}
-                  {l.yearsInBusiness && (
-                    <Chip tone="primary">{l.yearsInBusiness}+ yrs</Chip>
-                  )}
-                  {l.yearsWithYP && (
-                    <div className="text-caption text-neutral">{l.yearsWithYP}y on YP</div>
-                  )}
-                  {!l.yearEstablished && !l.yearsInBusiness && !l.yearsWithYP && <Dash />}
-                </div>
-              </Td>}
-              {isVisible('social') && <Td>
-                <div className="flex gap-1.5 flex-wrap max-w-[200px]">
-                  {groupSocials(l.socials).map(({ key, urls }) => (
-                    <span key={key} className="inline-flex items-center gap-0.5">
-                      <a
-                        href={urls[0]}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-caption text-primary hover:underline capitalize"
-                      >
-                        {key}
-                      </a>
-                      {urls.length > 1 && (
-                        <span className="text-caption text-neutral">×{urls.length}</span>
+                </Td>
+              )}
+              {isVisible('source') && (
+                <Td>
+                  <span className="inline-flex items-center h-5 px-1.5 rounded text-[10px] font-medium uppercase tracking-wider border bg-background text-neutral border-border whitespace-nowrap">
+                    {l.source}
+                  </span>
+                </Td>
+              )}
+              {isVisible('rating') && (
+                <Td>
+                  {l.rating !== null ? (
+                    <span className="inline-flex items-center gap-1 font-mono font-tabular">
+                      <Star size={11} className="text-warning fill-warning" />
+                      {l.rating.toFixed(1)}
+                      {l.reviewCount !== null && (
+                        <span className="text-caption text-neutral">
+                          ({l.reviewCount})
+                        </span>
                       )}
                     </span>
-                  ))}
-                  {l.socials.length === 0 && <Dash />}
-                </div>
-              </Td>}
-              {isVisible('owner') && <Td>
-                {l.ownerSearchUrl ? (
-                  <a
-                    href={l.ownerSearchUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-1 text-caption"
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('years') && (
+                <Td>
+                  {l.yearsInBusiness ? (
+                    <Chip tone="primary" className="!h-5 !text-[11px]">
+                      {l.yearsInBusiness}+
+                    </Chip>
+                  ) : l.yearEstablished ? (
+                    <span className="font-mono font-tabular text-ink-muted">
+                      Est {l.yearEstablished}
+                    </span>
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('owner') && (
+                <Td>
+                  {l.ownerName ? (
+                    <span className="truncate inline-block max-w-[160px]" title={l.ownerName}>
+                      {l.ownerName}
+                    </span>
+                  ) : l.ownerSearchUrl ? (
+                    <a
+                      href={l.ownerSearchUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline inline-flex items-center gap-1 text-caption"
+                    >
+                      <SearchIcon size={10} />
+                      Find
+                    </a>
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('yp') && (
+                <Td>
+                  {l.sourceUrl ? (
+                    <a
+                      href={l.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-caption text-primary hover:underline inline-flex items-center gap-1"
+                      title={l.sourceUrl}
+                    >
+                      Open
+                      <ExternalLink size={9} />
+                    </a>
+                  ) : (
+                    <Dash />
+                  )}
+                </Td>
+              )}
+              {isVisible('search') && (
+                <Td>
+                  <span
+                    className="text-caption text-ink-muted truncate inline-block max-w-[180px]"
+                    title={`${l.searchQuery} · ${l.searchLocation}`}
                   >
-                    <SearchIcon size={10} />
-                    Find on LinkedIn
-                  </a>
-                ) : (
-                  <Dash />
-                )}
-                {l.ownerName && <div>{l.ownerName}</div>}
-                {l.ownerEmail && (
-                  <div className="text-caption text-primary truncate max-w-[180px]">
-                    {l.ownerEmail}
-                  </div>
-                )}
-                {l.ownerLinkedin && (
-                  <a
-                    href={l.ownerLinkedin}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-caption text-primary inline-flex items-center gap-1 mt-0.5"
+                    {l.searchQuery} · {l.searchLocation}
+                  </span>
+                </Td>
+              )}
+              {isVisible('actions') && (
+                <Td>
+                  <button
+                    onClick={() => setFollowupLead(l)}
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border text-caption text-ink-muted hover:border-primary hover:text-primary transition-colors"
+                    title="Add follow-up task"
                   >
-                    <Linkedin size={10} />
-                    Profile
-                  </a>
-                )}
-              </Td>}
-              {isVisible('yp') && <Td>
-                {l.sourceUrl ? (
-                  <a
-                    href={l.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-caption text-primary hover:underline inline-flex items-center gap-1"
-                    title={l.sourceUrl}
-                  >
-                    <FileText size={10} />
-                    Open on YP
-                    <ExternalLink size={9} />
-                  </a>
-                ) : (
-                  <Dash />
-                )}
-              </Td>}
-              {isVisible('search') && <Td>
-                <div className="text-caption text-ink-muted">
-                  {l.searchQuery}
-                  <div className="text-neutral">{l.searchLocation}</div>
-                  <div className="text-neutral mt-0.5">{relativeTime(l.createdAt)}</div>
-                </div>
-              </Td>}
+                    <Plus size={10} /> Follow-up
+                  </button>
+                </Td>
+              )}
               {onDelete && (
                 <Td>
                   <button
@@ -440,7 +442,7 @@ export function LeadsTable({
                     aria-label="Delete lead"
                     title="Delete lead"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={13} />
                   </button>
                 </Td>
               )}
@@ -449,7 +451,6 @@ export function LeadsTable({
         </tbody>
       </table>
 
-      {/* Per-row follow-up modal — rendered once for the whole table. */}
       <TaskFormModal
         open={followupLead !== null}
         initial={
@@ -464,9 +465,7 @@ export function LeadsTable({
         }
         lockedLeadId={followupLead?.id}
         pending={createTask.isPending}
-        error={
-          createTask.error ? (createTask.error as Error).message : null
-        }
+        error={createTask.error ? (createTask.error as Error).message : null}
         onClose={() => setFollowupLead(null)}
         onSubmit={(input) => createTask.mutate(input)}
       />
@@ -474,17 +473,55 @@ export function LeadsTable({
   );
 }
 
+function SocialIcons({ socials }: { socials: string[] }) {
+  if (socials.length === 0) return <Dash />;
+  const grouped = groupSocials(socials);
+  const max = 5;
+  const shown = grouped.slice(0, max);
+  const extra = grouped.length - max;
+  return (
+    <div className="flex items-center gap-1 max-w-[180px] truncate">
+      {shown.map(({ key, urls }) => (
+        <a
+          key={key}
+          href={urls[0]}
+          target="_blank"
+          rel="noreferrer"
+          title={`${key}${urls.length > 1 ? ` ×${urls.length}` : ''}`}
+          className="inline-flex items-center justify-center h-6 w-6 rounded text-neutral hover:bg-background hover:text-primary transition-colors"
+        >
+          <SocialIconForKey k={key} />
+        </a>
+      ))}
+      {extra > 0 && (
+        <span className="text-caption text-neutral font-mono font-tabular">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SocialIconForKey({ k }: { k: string }) {
+  // Lucide doesn't have brand icons across the board, so we use Linkedin
+  // where possible and fall back to a generic Globe for the rest. The
+  // platform name in the title attribute disambiguates.
+  if (k === 'linkedin') return <Linkedin size={12} />;
+  return <Globe size={12} />;
+}
+
 function Th({
   children,
-  className,
+  align = 'left',
 }: {
   children: React.ReactNode;
-  className?: string;
+  align?: 'left' | 'right';
 }) {
   return (
     <th
       className={
-        'px-4 py-3.5 font-medium whitespace-nowrap ' + (className ?? '')
+        'px-3 py-2 font-medium whitespace-nowrap ' +
+        (align === 'right' ? 'text-right' : '')
       }
     >
       {children}
@@ -493,7 +530,11 @@ function Th({
 }
 
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-4 align-top">{children}</td>;
+  return (
+    <td className="px-3 py-2 align-middle whitespace-nowrap overflow-hidden">
+      {children}
+    </td>
+  );
 }
 
 function Dash() {
@@ -504,7 +545,7 @@ function TaskCountBadge({ count }: { count: number }) {
   if (count === 0) return <Dash />;
   return (
     <span
-      className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-md bg-primary/10 text-primary text-[12px] font-medium"
+      className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-primary/10 text-primary text-[11px] font-medium font-mono font-tabular"
       title={`${count} open task${count === 1 ? '' : 's'}`}
     >
       {count}
@@ -519,4 +560,3 @@ function prettyHost(url: string) {
     return url;
   }
 }
-

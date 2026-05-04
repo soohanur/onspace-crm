@@ -184,18 +184,8 @@ function Body() {
   const items = data?.items ?? [];
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-h1 mb-1">Meetings</h1>
-          <p className="text-ink-muted text-bodysm">
-            Phone, video, or in-person calls with your leads. Scheduling a
-            meeting moves the lead to <strong>booked</strong>; marking one
-            completed creates an automatic follow-up task. When the
-            connected account has the Calendar scope, attendees also
-            receive a Google Calendar invite.
-          </p>
-        </div>
+    <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <div className="flex items-center justify-end mb-4">
         <Button onClick={() => setModal({ mode: 'create' })}>
           <Plus size={14} /> New meeting
         </Button>
