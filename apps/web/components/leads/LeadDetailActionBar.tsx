@@ -102,6 +102,8 @@ export function LeadDetailActionBar({
           <img
             src={lead.logoUrl}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="w-8 h-8 rounded object-cover bg-background border border-border shrink-0"
           />
         ) : (
