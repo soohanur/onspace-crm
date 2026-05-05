@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
@@ -54,109 +55,112 @@ export function LeadAlertCard({ lead }: { lead: Lead }) {
     queryFn: () => api.listLeadSequences(lead.id),
   });
 
-  const now = Date.now();
+  // Memoize the alert assembly so unrelated parent re-renders don't
+  // re-sort meetings/calls/tasks every paint.
+  const alerts = useMemo<AlertItem[]>(() => {
+    const now = Date.now();
 
-  const upcomingMeeting = meetings
-    .filter(
-      (m) =>
-        m.status === 'scheduled' &&
-        new Date(m.scheduledAt).getTime() > now,
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.scheduledAt).getTime() -
-        new Date(b.scheduledAt).getTime(),
-    )[0];
+    const upcomingMeeting = meetings
+      .filter(
+        (m) =>
+          m.status === 'scheduled' &&
+          new Date(m.scheduledAt).getTime() > now,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledAt).getTime() -
+          new Date(b.scheduledAt).getTime(),
+      )[0];
 
-  const upcomingCall = calls
-    .filter(
-      (c) =>
-        c.status === 'scheduled' &&
-        new Date(c.occurredAt).getTime() > now,
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.occurredAt).getTime() -
-        new Date(b.occurredAt).getTime(),
-    )[0];
+    const upcomingCall = calls
+      .filter(
+        (c) =>
+          c.status === 'scheduled' &&
+          new Date(c.occurredAt).getTime() > now,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.occurredAt).getTime() -
+          new Date(b.occurredAt).getTime(),
+      )[0];
 
-  const openTasks = tasks.filter(
-    (t) => t.status === 'open' || t.status === 'in_progress',
-  );
-  // Most urgent: overdue first (oldest first), then today (earliest first),
-  // then upcoming (earliest first). Tasks without a dueAt go last.
-  const urgentTask = openTasks
-    .slice()
-    .sort((a, b) => {
-      const ad = a.dueAt ? new Date(a.dueAt).getTime() : Infinity;
-      const bd = b.dueAt ? new Date(b.dueAt).getTime() : Infinity;
-      return ad - bd;
-    })[0];
+    const openTasks = tasks.filter(
+      (t) => t.status === 'open' || t.status === 'in_progress',
+    );
+    const urgentTask = openTasks
+      .slice()
+      .sort((a, b) => {
+        const ad = a.dueAt ? new Date(a.dueAt).getTime() : Infinity;
+        const bd = b.dueAt ? new Date(b.dueAt).getTime() : Infinity;
+        return ad - bd;
+      })[0];
 
-  const activeEnrollment = enrollments.find((e) => e.status === 'active');
+    const activeEnrollment = enrollments.find((e) => e.status === 'active');
 
-  const alerts: AlertItem[] = [];
-  if (upcomingMeeting) {
-    alerts.push({
-      icon: <Calendar size={13} className="text-primary" />,
-      tone: 'primary',
-      label: 'Meeting scheduled',
-      detail: `${upcomingMeeting.title} · ${formatWhen(upcomingMeeting.scheduledAt)}`,
-      href: '#meetings',
-    });
-  }
-  if (upcomingCall) {
-    alerts.push({
-      icon: <Phone size={13} className="text-primary" />,
-      tone: 'primary',
-      label: 'Call scheduled',
-      detail: formatWhen(upcomingCall.occurredAt),
-      href: '#calls',
-    });
-  }
-  if (urgentTask) {
-    const tone =
-      urgentTask.dueAt && new Date(urgentTask.dueAt).getTime() < now
-        ? 'error'
-        : urgentTask.dueAt && isToday(urgentTask.dueAt)
-        ? 'warning'
-        : 'primary';
-    alerts.push({
-      icon:
-        tone === 'error' ? (
-          <AlertCircle size={13} className="text-error" />
-        ) : tone === 'warning' ? (
-          <Clock size={13} className="text-warning" />
-        ) : (
-          <Clock size={13} className="text-primary" />
-        ),
-      tone,
-      label:
-        tone === 'error'
-          ? 'Follow-up overdue'
-          : tone === 'warning'
-          ? 'Follow-up due today'
-          : 'Follow-up coming up',
-      detail: urgentTask.dueAt
-        ? `${urgentTask.title} · ${formatWhen(urgentTask.dueAt)}`
-        : urgentTask.title,
-      href: '#tasks',
-    });
-  }
-  if (activeEnrollment) {
-    const total = activeEnrollment.sequence?._count?.steps ?? 0;
-    alerts.push({
-      icon: <Workflow size={13} className="text-primary" />,
-      tone: 'primary',
-      label: `Active sequence: ${activeEnrollment.sequence?.name ?? 'Sequence'}`,
-      detail: total
-        ? `Step ${activeEnrollment.nextStepOrder} of ${total}`
-        : 'In progress',
-      href: activeEnrollment.sequenceId
-        ? `/campaigns/sequences/${activeEnrollment.sequenceId}`
-        : '#sequences',
-    });
-  }
+    const out: AlertItem[] = [];
+    if (upcomingMeeting) {
+      out.push({
+        icon: <Calendar size={13} className="text-primary" />,
+        tone: 'primary',
+        label: 'Meeting scheduled',
+        detail: `${upcomingMeeting.title} · ${formatWhen(upcomingMeeting.scheduledAt)}`,
+        href: '#meetings',
+      });
+    }
+    if (upcomingCall) {
+      out.push({
+        icon: <Phone size={13} className="text-primary" />,
+        tone: 'primary',
+        label: 'Call scheduled',
+        detail: formatWhen(upcomingCall.occurredAt),
+        href: '#calls',
+      });
+    }
+    if (urgentTask) {
+      const tone =
+        urgentTask.dueAt && new Date(urgentTask.dueAt).getTime() < now
+          ? 'error'
+          : urgentTask.dueAt && isToday(urgentTask.dueAt)
+          ? 'warning'
+          : 'primary';
+      out.push({
+        icon:
+          tone === 'error' ? (
+            <AlertCircle size={13} className="text-error" />
+          ) : tone === 'warning' ? (
+            <Clock size={13} className="text-warning" />
+          ) : (
+            <Clock size={13} className="text-primary" />
+          ),
+        tone,
+        label:
+          tone === 'error'
+            ? 'Follow-up overdue'
+            : tone === 'warning'
+            ? 'Follow-up due today'
+            : 'Follow-up coming up',
+        detail: urgentTask.dueAt
+          ? `${urgentTask.title} · ${formatWhen(urgentTask.dueAt)}`
+          : urgentTask.title,
+        href: '#tasks',
+      });
+    }
+    if (activeEnrollment) {
+      const total = activeEnrollment.sequence?._count?.steps ?? 0;
+      out.push({
+        icon: <Workflow size={13} className="text-primary" />,
+        tone: 'primary',
+        label: `Active sequence: ${activeEnrollment.sequence?.name ?? 'Sequence'}`,
+        detail: total
+          ? `Step ${activeEnrollment.nextStepOrder} of ${total}`
+          : 'In progress',
+        href: activeEnrollment.sequenceId
+          ? `/campaigns/sequences/${activeEnrollment.sequenceId}`
+          : '#sequences',
+      });
+    }
+    return out;
+  }, [meetings, calls, tasks, enrollments]);
 
   return (
     <Card>
