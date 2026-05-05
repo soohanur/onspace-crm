@@ -75,9 +75,16 @@ export function NotesModal({
       }
     };
     window.addEventListener('keydown', onKey);
+
+    // Lock background scroll while the dialog is up so wheel events
+    // don't scroll the lead detail page underneath.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     return () => {
       clearTimeout(t);
       window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
     };
   }, [open, onClose, editingId]);
 
