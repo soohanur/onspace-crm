@@ -42,3 +42,6 @@ client_secret*.json
 
 # user-uploaded email attachments (filesystem store)
 apps/api/uploads/
+
+# local-only prompt drafts / scratch specs
+prompts/
