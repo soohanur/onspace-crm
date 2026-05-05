@@ -166,6 +166,11 @@ export function LeadDetailActionBar({
               else if (n < 0) setScoreDraft('0');
               else if (n > 100) setScoreDraft('100');
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
             className="h-8 w-14 px-2 text-bodysm font-mono font-tabular rounded-md border border-border bg-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition"
           />
         </div>
