@@ -28,7 +28,11 @@ export function LeadEmailHistory({
   const { data: emails = [] } = useQuery({
     queryKey: ['email-history', leadId],
     queryFn: () => api.listEmailHistory(leadId),
-    refetchInterval: 5_000,
+    // Poll less aggressively — every 15s on a focused tab, paused when
+    // the tab is hidden. The previous 5s cadence hammered the API for
+    // little perceptible benefit.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: accounts = [] } = useQuery({
