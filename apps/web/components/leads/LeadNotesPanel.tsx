@@ -89,7 +89,7 @@ export function LeadNotesPanel({ leadId }: { leadId: string }) {
       />
       <div className="mt-3 flex justify-end">
         <Button
-          onClick={() => create.mutate(body)}
+          onClick={() => create.mutate(body.trim())}
           disabled={!canSubmit}
           className="min-w-[120px]"
         >
