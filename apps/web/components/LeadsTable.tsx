@@ -170,6 +170,8 @@ export function LeadsTable({
                       <img
                         src={l.logoUrl}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-6 h-6 rounded object-cover bg-background border border-border shrink-0"
                       />
                     ) : (
