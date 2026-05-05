@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   useMutation,
   useQuery,
@@ -163,28 +163,29 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
     },
   });
 
-  // Newest-first transitions and the lead-created event, kept as separate
-  // log rows so every state change in the lead's life is explicit.
-  const transitions = events
-    .filter(
-      (e): e is Extract<LeadActivityEvent, { kind: 'stage_changed' }> =>
-        e.kind === 'stage_changed',
-    )
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  // Newest-first transitions and per-row dwell time. Memoized so unrelated
+  // re-renders (e.g. StagePicker re-render while editing score) don't
+  // re-walk the events array on every keystroke.
+  const { transitions, dwellByEntryId } = useMemo(() => {
+    const tx = events
+      .filter(
+        (e): e is Extract<LeadActivityEvent, { kind: 'stage_changed' }> =>
+          e.kind === 'stage_changed',
+      )
+      .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 
-  // For each transition, compute how long the lead was in the previous stage
-  // (= time since the previous transition, or since lead.createdAt for the
-  // very first transition).
-  const ascending = [...transitions].reverse();
-  const dwellByEntryId = new Map<string, number>();
-  for (let i = 0; i < ascending.length; i++) {
-    const prevAt =
-      i === 0
-        ? new Date(lead.createdAt).getTime()
-        : new Date(ascending[i - 1].at).getTime();
-    const currAt = new Date(ascending[i].at).getTime();
-    dwellByEntryId.set(ascending[i].entryId, Math.max(0, currAt - prevAt));
-  }
+    const ascending = [...tx].reverse();
+    const dwell = new Map<string, number>();
+    for (let i = 0; i < ascending.length; i++) {
+      const prevAt =
+        i === 0
+          ? new Date(lead.createdAt).getTime()
+          : new Date(ascending[i - 1].at).getTime();
+      const currAt = new Date(ascending[i].at).getTime();
+      dwell.set(ascending[i].entryId, Math.max(0, currAt - prevAt));
+    }
+    return { transitions: tx, dwellByEntryId: dwell };
+  }, [events, lead.createdAt]);
 
   // Time spent in the current stage = time since the last transition, or
   // since lead.createdAt if there are no transitions yet.
