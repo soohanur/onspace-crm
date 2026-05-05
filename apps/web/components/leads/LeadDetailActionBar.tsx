@@ -204,6 +204,8 @@ function ValidityToggle({
 }) {
   return (
     <div
+      role="radiogroup"
+      aria-label="Lead validity"
       className={clsx(
         'inline-flex border border-border rounded-md overflow-hidden text-caption shrink-0',
         pending && 'opacity-60',
@@ -211,6 +213,9 @@ function ValidityToggle({
     >
       <button
         type="button"
+        role="radio"
+        aria-checked={value === 'valid'}
+        aria-label="Mark lead as valid"
         onClick={() => value !== 'valid' && onChange('valid')}
         className={clsx(
           'inline-flex items-center gap-1 px-2 h-8 transition-colors',
@@ -219,10 +224,13 @@ function ValidityToggle({
             : 'bg-surface text-ink-muted hover:bg-background',
         )}
       >
-        <CheckCircle2 size={11} /> Valid
+        <CheckCircle2 size={11} aria-hidden /> Valid
       </button>
       <button
         type="button"
+        role="radio"
+        aria-checked={value === 'invalid'}
+        aria-label="Mark lead as invalid"
         onClick={() => value !== 'invalid' && onChange('invalid')}
         className={clsx(
           'inline-flex items-center gap-1 px-2 h-8 transition-colors border-l border-border',
@@ -231,7 +239,7 @@ function ValidityToggle({
             : 'bg-surface text-ink-muted hover:bg-background',
         )}
       >
-        <AlertTriangle size={11} /> Invalid
+        <AlertTriangle size={11} aria-hidden /> Invalid
       </button>
     </div>
   );
