@@ -301,7 +301,7 @@ export class LeadsService implements OnModuleInit {
     // stageChangedAt accurate (only updated when stage really moves) and
     // skips the automation hook for no-op clicks.
     if (existing.stage === stage) {
-      return this.prisma.lead.findUnique({ where: { id } }) as Promise<any>;
+      return this.prisma.lead.findUnique({ where: { id } });
     }
 
     // Route the manual change through applyStageChange so stage history
@@ -314,9 +314,8 @@ export class LeadsService implements OnModuleInit {
       stage,
       'manual',
     );
-    const updated = (await this.prisma.lead.findUnique({
-      where: { id },
-    })) as any;
+    const updated = await this.prisma.lead.findUnique({ where: { id } });
+    if (!updated) throw new NotFoundException('Lead not found');
 
     // Manual stage change side-effects (e.g. qualified -> auto-task).
     // Wrapped internally; never bubbles.
