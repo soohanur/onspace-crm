@@ -56,6 +56,7 @@ export function NotificationBell() {
     queryKey: ['notifications-unread-count'],
     queryFn: api.getNotificationUnreadCount,
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
