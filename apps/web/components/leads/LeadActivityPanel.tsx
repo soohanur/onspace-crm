@@ -143,6 +143,7 @@ function StageHistoryPanel({ lead }: { lead: Lead }) {
     queryKey: ['lead-activity', lead.id],
     queryFn: () => api.getLeadActivity(lead.id, { days: 365, limit: 200 }),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
