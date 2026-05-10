@@ -4,41 +4,20 @@
 // for Next.js 15 prerender.
 export const dynamic = 'force-dynamic';
 
-import {
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
+import { Suspense, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { RefreshCcw } from 'lucide-react';
-import { api, Lead, LeadStage, LeadsPage } from '@/lib/api';
-import { LEAD_STAGES } from '@/lib/stages';
+import { api, Lead, LeadStage } from '@/lib/api';
+import { LEAD_STAGES, stageClass, stageLabel } from '@/lib/stages';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
+import { useColumnPrefs } from '@/hooks/useColumnPrefs';
 import { filterToSearchParams } from '@/lib/filters';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LeadsFilterModal } from '@/components/leads/LeadsFilterModal';
 import { ViewToggle } from '@/components/leads/ViewToggle';
-import { Filter } from 'lucide-react';
-import { activeFilterCount } from '@/lib/filters';
-import { SaveAsSmartGroupButton } from '@/components/groups/SaveAsSmartGroupButton';
-import { StageColumn } from '@/components/lead-stage/StageColumn';
-import { LeadCard } from '@/components/lead-stage/LeadCard';
-import { LeadTasksDrawer } from '@/components/lead-stage/LeadTasksDrawer';
+import { LeadsTable } from '@/components/LeadsTable';
+import { StageFilterBar } from '@/components/lead-stage/StageFilterBar';
 
 const PAGE_SIZE = 1000;
 
@@ -57,150 +36,63 @@ export default function LeadStagePage() {
 }
 
 function LeadStageBody() {
-  const qc = useQueryClient();
   const { filter } = useLeadsFilter();
-  const filterParams = useMemo(
-    () => Object.fromEntries(filterToSearchParams(filter).entries()),
-    [filter],
-  );
+  const { visible } = useColumnPrefs();
 
-  // Single fetch, refetch on focus only — no 3s polling here, the
-  // payload is heavier than the table.
+  const [activeStage, setActiveStage] = useState<LeadStage>(LEAD_STAGES[0]);
+
+  // Strip URL stage from filter so the tab drives stage selection.
+  // Pass the active stage explicitly to the API.
+  const filterParams = useMemo(() => {
+    const { stage: _ignored, ...rest } = filter;
+    const params = Object.fromEntries(
+      filterToSearchParams(rest).entries(),
+    );
+    return params;
+  }, [filter]);
+
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['leads-global', filterParams],
-    queryFn: () => api.listLeads({ ...filterParams, take: PAGE_SIZE }),
+    queryKey: ['leads-by-stage', activeStage, filterParams],
+    queryFn: () =>
+      api.listLeads({
+        ...filterParams,
+        stage: activeStage,
+        take: String(PAGE_SIZE),
+      }),
     refetchOnWindowFocus: true,
   });
 
-  const items = data?.items ?? [];
+  // Per-stage counts for the tab badges. One filter-aware request per
+  // stage; cached together by query key.
+  const { data: counts } = useQuery({
+    queryKey: ['leads-by-stage-counts', filterParams],
+    queryFn: async () => {
+      const out: Record<LeadStage, number> = {} as Record<LeadStage, number>;
+      await Promise.all(
+        LEAD_STAGES.map(async (stage) => {
+          const stats = await api.leadStats({
+            ...filterParams,
+            stage,
+          });
+          out[stage] = stats.total;
+        }),
+      );
+      return out;
+    },
+    refetchOnWindowFocus: true,
+  });
+
+  const items: Lead[] = data?.items ?? [];
   const total = items.length;
 
-  // Bulk task counts for visible cards. One round trip per render, keyed
-  // by the sorted ID list so the cache hits across re-renders.
-  const idsKey = useMemo(
-    () => items.map((l) => l.id).sort().join(','),
-    [items],
-  );
-  const { data: taskCounts } = useQuery({
-    queryKey: ['lead-task-counts', idsKey],
-    queryFn: () => api.taskOpenCounts(items.map((l) => l.id)),
-    enabled: items.length > 0,
-  });
-
-  // Group by stage — memoized so re-renders during a drag don't re-bucket.
-  const buckets = useMemo(() => {
-    const out: Record<LeadStage, Lead[]> = {} as Record<LeadStage, Lead[]>;
-    for (const stage of LEAD_STAGES) out[stage] = [];
-    for (const lead of items) {
-      const arr = out[lead.stage as LeadStage];
-      if (arr) arr.push(lead);
-    }
-    return out;
-  }, [items]);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      // Don't start a drag on simple clicks (link navigation, button taps).
-      activationConstraint: { distance: 5 },
-    }),
-  );
-
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const draggingLead = useMemo(
-    () => items.find((l) => l.id === draggingId) ?? null,
-    [draggingId, items],
-  );
-
-  const updateStage = useMutation({
-    mutationFn: (input: { id: string; stage: LeadStage }) =>
-      api.updateLeadStage(input.id, input.stage),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['lead', vars.id] });
-      qc.invalidateQueries({ queryKey: ['leads-global'] });
-      qc.invalidateQueries({ queryKey: ['lead-task-counts'] });
-    },
-  });
-
-  const [toast, setToast] = useState<string | null>(null);
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  const onDragStart = (e: DragStartEvent) => {
-    setDraggingId(String(e.active.id));
-  };
-
-  const onDragEnd = (e: DragEndEvent) => {
-    setDraggingId(null);
-    const leadId = String(e.active.id);
-    const fromStage = e.active.data.current?.stage as LeadStage | undefined;
-    const toStage = (e.over?.id as LeadStage | undefined) ?? null;
-    if (!toStage || !fromStage || fromStage === toStage) return;
-    if (!LEAD_STAGES.includes(toStage)) return;
-
-    // Optimistic cache update. Reads the same query key the page reads
-    // from — items will rebucket on the next memoization pass.
-    const cacheKey = ['leads-global', filterParams];
-    const prev = qc.getQueryData<LeadsPage>(cacheKey);
-    if (prev) {
-      qc.setQueryData<LeadsPage>(cacheKey, {
-        ...prev,
-        items: prev.items.map((l) =>
-          l.id === leadId ? { ...l, stage: toStage } : l,
-        ),
-      });
-    }
-
-    updateStage.mutate(
-      { id: leadId, stage: toStage },
-      {
-        onError: (err) => {
-          // Roll back on failure
-          if (prev) qc.setQueryData(cacheKey, prev);
-          setToast(
-            `Couldn't move card: ${err instanceof Error ? err.message : 'unknown error'}`,
-          );
-        },
-      },
-    );
-  };
-
-  // Drawer state.
-  const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const filterCount = activeFilterCount(filter);
-
   return (
-    <div className="max-w-[1700px] mx-auto px-6 py-6 space-y-4">
-      <Card className="!p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex flex-wrap gap-2 items-center">
-          <button
-            onClick={() => setFilterOpen(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-surface text-bodysm text-ink-muted hover:border-primary hover:text-primary"
-          >
-            <Filter size={13} />
-            Filters
-            {filterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-5 px-1 rounded bg-primary text-white text-[10px] font-mono font-tabular">
-                {filterCount}
-              </span>
-            )}
-          </button>
-          <ViewToggle />
-          <div className="ml-auto flex gap-2 flex-wrap items-center">
-            <div className="text-caption text-ink-muted font-tabular">
-              {isLoading
-                ? 'Loading…'
-                : `${total.toLocaleString()} lead${total === 1 ? '' : 's'}`}
-              {data && total >= PAGE_SIZE && (
-                <span className="ml-2 text-warning">
-                  (capped at {PAGE_SIZE} — narrow filters)
-                </span>
-              )}
-            </div>
-            <SaveAsSmartGroupButton filter={filter} />
+    <div className="max-w-[1700px] mx-auto px-6 py-6 space-y-3">
+      {/* Filter strip */}
+      <Card className="!p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <StageFilterBar />
+          <div className="flex items-center gap-2">
+            <ViewToggle />
             <Button
               variant="secondary"
               onClick={() => refetch()}
@@ -215,59 +107,67 @@ function LeadStageBody() {
             </Button>
           </div>
         </div>
-
-            <DndContext
-              sensors={sensors}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onDragCancel={() => setDraggingId(null)}
-            >
-              <div className="overflow-x-auto scroll-thin">
-                <div className="flex gap-3 px-3 py-3 min-w-max">
-                  {LEAD_STAGES.map((stage) => (
-                    <StageColumn
-                      key={stage}
-                      stage={stage}
-                      leads={buckets[stage]}
-                      taskCounts={taskCounts ?? {}}
-                      draggingId={draggingId}
-                      onOpenTasks={(lead) => setDrawerLead(lead)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-          <DragOverlay dropAnimation={null}>
-            {draggingLead ? (
-              <div className="rotate-1">
-                <LeadCard
-                  lead={draggingLead}
-                  openTaskCount={taskCounts?.[draggingLead.id] ?? 0}
-                  onOpenTasks={() => {}}
-                />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
       </Card>
 
-      <LeadsFilterModal open={filterOpen} onClose={() => setFilterOpen(false)} />
+      {/* Stage tabs */}
+      <div
+        className="flex gap-1.5 overflow-x-auto scroll-thin py-1"
+        role="tablist"
+        aria-label="Lead stages"
+      >
+        {LEAD_STAGES.map((stage) => {
+          const active = stage === activeStage;
+          const count = counts?.[stage];
+          return (
+            <button
+              key={stage}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveStage(stage)}
+              className={clsx(
+                'inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-bodysm font-medium border transition-colors whitespace-nowrap',
+                active
+                  ? clsx(stageClass(stage), 'shadow-e1')
+                  : 'bg-surface text-ink-muted border-border hover:border-primary',
+              )}
+            >
+              {stageLabel(stage)}
+              {count !== undefined && (
+                <span
+                  className={clsx(
+                    'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded text-[10px] font-mono font-tabular',
+                    active
+                      ? 'bg-white/30 text-current'
+                      : 'bg-background text-neutral border border-border',
+                  )}
+                >
+                  {count.toLocaleString()}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Tasks drawer */}
-      <LeadTasksDrawer
-        leadSummary={drawerLead}
-        onClose={() => setDrawerLead(null)}
-      />
-
-      {/* Tiny inline toast */}
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-[60] max-w-sm bg-error text-white text-bodysm px-4 py-2.5 rounded-md shadow-e3"
-        >
-          {toast}
+      {/* Active-stage table */}
+      <Card className="!p-0 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-caption text-ink-muted font-tabular">
+            {isLoading
+              ? 'Loading…'
+              : `${total.toLocaleString()} ${stageLabel(activeStage).toLowerCase()} lead${
+                  total === 1 ? '' : 's'
+                }`}
+            {data && total >= PAGE_SIZE && (
+              <span className="ml-2 text-warning">
+                (capped at {PAGE_SIZE} — narrow filters)
+              </span>
+            )}
+          </div>
         </div>
-      )}
+        <LeadsTable leads={items} visibleColumns={visible} />
+      </Card>
     </div>
   );
 }
