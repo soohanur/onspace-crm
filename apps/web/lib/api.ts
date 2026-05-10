@@ -267,6 +267,7 @@ export interface LeadFacets {
   categories: string[];
   cities: string[];
   states: string[];
+  countries: string[];
 }
 
 export interface CreateGroupInput {

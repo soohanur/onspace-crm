@@ -388,7 +388,7 @@ export class LeadsService implements OnModuleInit {
    * Cheap with the existing indexes; cap to 200 items each.
    */
   async facets() {
-    const [categories, cities, states] = await Promise.all([
+    const [categories, cities, states, countries] = await Promise.all([
       this.prisma.$queryRaw<{ value: string }[]>`
         SELECT DISTINCT unnest(categories) AS value
         FROM leads
@@ -410,12 +410,20 @@ export class LeadsService implements OnModuleInit {
         orderBy: { state: 'asc' },
         take: 100,
       }),
+      this.prisma.lead.findMany({
+        where: { country: { not: null } },
+        distinct: ['country'],
+        select: { country: true },
+        orderBy: { country: 'asc' },
+        take: 100,
+      }),
     ]);
 
     return {
       categories: categories.map((r) => r.value).filter(Boolean),
       cities: cities.map((r) => r.city!).filter(Boolean),
       states: states.map((r) => r.state!).filter(Boolean),
+      countries: countries.map((r) => r.country!).filter(Boolean),
     };
   }
 }
