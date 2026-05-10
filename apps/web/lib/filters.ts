@@ -23,6 +23,7 @@ export interface LeadFilter {
   validity?: LeadValidity;
   scoreMin?: number;
   scoreMax?: number;
+  stageChangedSince?: string;
   groupId?: string;
   orderBy?: LeadOrderBy;
 }
@@ -82,6 +83,7 @@ export function searchParamsToFilter(sp: URLSearchParams): LeadFilter {
   if (v === 'valid' || v === 'invalid') f.validity = v;
   f.scoreMin = num('scoreMin');
   f.scoreMax = num('scoreMax');
+  f.stageChangedSince = get('stageChangedSince');
   f.groupId = get('groupId');
   const ob = get('orderBy');
   if (ob === 'recent' || ob === 'name' || ob === 'rating' || ob === 'years') f.orderBy = ob;
