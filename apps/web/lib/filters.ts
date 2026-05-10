@@ -8,6 +8,7 @@ export interface LeadFilter {
   category?: string;
   city?: string;
   state?: string;
+  country?: string;
   hasWebsite?: 'true' | 'false';
   hasEmail?: 'true' | 'false';
   hasPhone?: 'true' | 'false';
@@ -59,6 +60,7 @@ export function searchParamsToFilter(sp: URLSearchParams): LeadFilter {
   f.category = get('category');
   f.city = get('city');
   f.state = get('state');
+  f.country = get('country');
   f.hasWebsite = tri('hasWebsite');
   f.hasEmail = tri('hasEmail');
   f.hasPhone = tri('hasPhone');
