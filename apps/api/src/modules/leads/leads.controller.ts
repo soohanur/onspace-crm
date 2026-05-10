@@ -146,6 +146,7 @@ export class LeadsController {
       validity: parseValidity(q.validity),
       scoreMin: parseNum(q.scoreMin),
       scoreMax: parseNum(q.scoreMax),
+      stageChangedSince: q.stageChangedSince,
       orderBy: q.orderBy as OrderBy | undefined,
       take: parseNum(q.take),
       cursor: q.cursor,

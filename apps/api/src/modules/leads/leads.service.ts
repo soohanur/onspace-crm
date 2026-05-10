@@ -56,6 +56,8 @@ export interface LeadFilter {
   validity?: LeadValidity;
   scoreMin?: number;
   scoreMax?: number;
+  /** ISO timestamp — only return leads whose stage entered its current bucket on/after this moment. */
+  stageChangedSince?: string;
 
   // pagination + sort
   orderBy?: OrderBy;
@@ -169,6 +171,12 @@ export class LeadsService implements OnModuleInit {
         ...(f.scoreMin !== undefined ? { gte: f.scoreMin } : {}),
         ...(f.scoreMax !== undefined ? { lte: f.scoreMax } : {}),
       };
+    }
+    if (f.stageChangedSince) {
+      const d = new Date(f.stageChangedSince);
+      if (!Number.isNaN(d.getTime())) {
+        where.stageChangedAt = { gte: d };
+      }
     }
 
     if (f.q) {
