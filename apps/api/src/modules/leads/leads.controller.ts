@@ -132,6 +132,7 @@ export class LeadsController {
       category: q.category,
       city: q.city,
       state: q.state,
+      country: q.country,
       hasWebsite: parseBool(q.hasWebsite),
       hasEmail: parseBool(q.hasEmail),
       hasPhone: parseBool(q.hasPhone),

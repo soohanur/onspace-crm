@@ -36,6 +36,7 @@ export interface LeadFilter {
   category?: string;
   city?: string;
   state?: string;
+  country?: string;
 
   // booleans
   hasWebsite?: boolean;
@@ -123,6 +124,7 @@ export class LeadsService implements OnModuleInit {
     if (f.searchLocation) where.searchLocation = f.searchLocation;
     if (f.city) where.city = f.city;
     if (f.state) where.state = f.state;
+    if (f.country) where.country = f.country;
 
     if (f.category) {
       // matches if `category` exact OR `categories` array contains it
