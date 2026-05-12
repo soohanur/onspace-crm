@@ -268,11 +268,17 @@ function Body() {
                 onOpen={() => setDetailCall(c)}
                 onEdit={() => setModal({ mode: 'edit', call: c })}
                 onComplete={() => {
-                  if (!c.outcome) {
-                    setModal({ mode: 'edit', call: c });
-                  } else {
-                    update.mutate({ id: c.id, patch: { status: 'completed' } });
-                  }
+                  // "Mark as done": open the form pre-stamped with the
+                  // current time + completed status; outcome is then
+                  // required before save.
+                  setModal({
+                    mode: 'edit',
+                    call: {
+                      ...c,
+                      occurredAt: new Date().toISOString(),
+                      status: 'completed',
+                    },
+                  });
                 }}
                 onCancel={() =>
                   update.mutate({ id: c.id, patch: { status: 'cancelled' } })
@@ -318,13 +324,15 @@ function Body() {
           setModal({ mode: 'edit', call: c });
         }}
         onComplete={(c) => {
-          if (!c.outcome) {
-            setDetailCall(null);
-            setModal({ mode: 'edit', call: c });
-          } else {
-            update.mutate({ id: c.id, patch: { status: 'completed' } });
-            setDetailCall(null);
-          }
+          setDetailCall(null);
+          setModal({
+            mode: 'edit',
+            call: {
+              ...c,
+              occurredAt: new Date().toISOString(),
+              status: 'completed',
+            },
+          });
         }}
         onCancel={(c) => {
           update.mutate({ id: c.id, patch: { status: 'cancelled' } });
