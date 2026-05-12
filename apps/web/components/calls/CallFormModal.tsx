@@ -267,7 +267,17 @@ export function CallFormModal({
             <Field label="Contact (optional)">
               <Select
                 value={form.contactId}
-                onChange={(v) => setForm({ ...form, contactId: v })}
+                onChange={(v) => {
+                  // Picking a contact swaps in that contact's number
+                  // (clears it when "None" or the contact has no phone),
+                  // so changing the owner actually changes the number.
+                  const c = v ? contacts.find((x) => x.id === v) : undefined;
+                  setForm({
+                    ...form,
+                    contactId: v,
+                    theirPhone: c?.phone ?? '',
+                  });
+                }}
                 options={['', ...contacts.map((c) => c.id)]}
                 labels={(v) =>
                   v === ''
