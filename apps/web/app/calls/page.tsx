@@ -48,6 +48,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  RotateCcw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -80,6 +81,7 @@ function Body() {
   const sp = useSearchParams();
   const qc = useQueryClient();
 
+  const trashView = sp.get('trash') === '1';
   const bucket: CallBucket =
     (sp.get('bucket') as CallBucket) &&
     CALL_BUCKETS.includes(sp.get('bucket') as CallBucket)
@@ -107,14 +109,22 @@ function Body() {
   };
 
   const queryParams = useMemo(
-    () => ({
-      bucket,
-      direction: directions.length ? directions : undefined,
-      outcome: outcomes.length ? outcomes : undefined,
-      leadId,
-    }),
+    () =>
+      trashView
+        ? {
+            trash: true as const,
+            direction: directions.length ? directions : undefined,
+            outcome: outcomes.length ? outcomes : undefined,
+            leadId,
+          }
+        : {
+            bucket,
+            direction: directions.length ? directions : undefined,
+            outcome: outcomes.length ? outcomes : undefined,
+            leadId,
+          },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bucket, directionCsv, outcomeCsv, leadId],
+    [trashView, bucket, directionCsv, outcomeCsv, leadId],
   );
 
   const { data, isLoading } = useQuery({
@@ -167,6 +177,14 @@ function Body() {
     mutationFn: (id: string) => api.deleteCall(id),
     onSuccess: invalidate,
   });
+  const restore = useMutation({
+    mutationFn: (id: string) => api.restoreCall(id),
+    onSuccess: invalidate,
+  });
+  const purge = useMutation({
+    mutationFn: (id: string) => api.purgeCall(id),
+    onSuccess: invalidate,
+  });
 
   const items = data?.items ?? [];
 
@@ -198,11 +216,11 @@ function Body() {
             b === 'all'
               ? counts?.total
               : counts?.[b as 'scheduled' | 'today' | 'recent'];
-          const active = b === bucket;
+          const active = !trashView && b === bucket;
           return (
             <button
               key={b}
-              onClick={() => updateUrl({ bucket: b })}
+              onClick={() => updateUrl({ bucket: b, trash: null })}
               className={clsx(
                 'mx-1 px-4 h-10 text-bodysm font-medium border-b-2 -mb-px inline-flex items-center gap-2 whitespace-nowrap',
                 active
@@ -224,6 +242,26 @@ function Body() {
             </button>
           );
         })}
+        <button
+          onClick={() => updateUrl({ trash: '1' })}
+          className={clsx(
+            'mx-1 px-4 h-10 text-bodysm font-medium border-b-2 -mb-px inline-flex items-center gap-2 whitespace-nowrap ml-auto',
+            trashView
+              ? 'border-error text-error'
+              : 'border-transparent text-ink-muted hover:text-ink',
+          )}
+        >
+          <Trash2 size={13} />
+          Trash
+          <span
+            className={clsx(
+              'inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded text-[11px] font-mono font-tabular',
+              trashView ? 'bg-error text-white' : 'bg-background text-ink-muted',
+            )}
+          >
+            {counts?.trash ?? '—'}
+          </span>
+        </button>
       </div>
 
       {/* Filter row */}
@@ -257,7 +295,9 @@ function Body() {
           <div className="px-5 py-8 text-bodysm text-ink-muted">Loading…</div>
         ) : items.length === 0 ? (
           <div className="px-5 py-12 text-center text-ink-muted text-bodysm">
-            No {bucketLabel(bucket).toLowerCase()} calls.
+            {trashView
+              ? 'Trash is empty.'
+              : `No ${bucketLabel(bucket).toLowerCase()} calls.`}
           </div>
         ) : (
           <ul className="divide-y divide-border">
@@ -265,6 +305,7 @@ function Body() {
               <CallRow
                 key={c.id}
                 call={c}
+                trashed={trashView}
                 onOpen={() => setDetailCall(c)}
                 onEdit={() => setModal({ mode: 'edit', call: c })}
                 onComplete={() => {
@@ -284,7 +325,12 @@ function Body() {
                   update.mutate({ id: c.id, patch: { status: 'cancelled' } })
                 }
                 onDelete={() => {
-                  if (confirm('Delete this call log?')) remove.mutate(c.id);
+                  if (confirm('Move this call to trash?')) remove.mutate(c.id);
+                }}
+                onRestore={() => restore.mutate(c.id)}
+                onPurge={() => {
+                  if (confirm('Permanently delete this call? This cannot be undone.'))
+                    purge.mutate(c.id);
                 }}
               />
             ))}
@@ -351,18 +397,24 @@ function Body() {
 
 function CallRow({
   call,
+  trashed,
   onOpen,
   onEdit,
   onComplete,
   onCancel,
   onDelete,
+  onRestore,
+  onPurge,
 }: {
   call: Call;
+  trashed?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onComplete: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onRestore: () => void;
+  onPurge: () => void;
 }) {
   const Icon = directionIcon(call.direction);
   const when = whenLabel(call.occurredAt, call.status);
@@ -455,38 +507,59 @@ function CallRow({
         )}
       </div>
       <div className="flex items-start gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        {call.status === 'scheduled' && (
-          <button
-            onClick={onComplete}
-            title="Mark completed"
-            className="p-1 rounded-md text-neutral hover:text-success hover:bg-background"
-          >
-            <CheckCircle2 size={14} />
-          </button>
+        {trashed ? (
+          <>
+            <button
+              onClick={onRestore}
+              title="Restore"
+              className="p-1 rounded-md text-neutral hover:text-success hover:bg-background"
+            >
+              <RotateCcw size={14} />
+            </button>
+            <button
+              onClick={onPurge}
+              title="Delete permanently"
+              className="p-1 rounded-md text-neutral hover:text-error hover:bg-background"
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
+        ) : (
+          <>
+            {call.status === 'scheduled' && (
+              <button
+                onClick={onComplete}
+                title="Mark completed"
+                className="p-1 rounded-md text-neutral hover:text-success hover:bg-background"
+              >
+                <CheckCircle2 size={14} />
+              </button>
+            )}
+            {call.status === 'scheduled' && (
+              <button
+                onClick={onCancel}
+                title="Cancel"
+                className="p-1 rounded-md text-neutral hover:text-warning hover:bg-background"
+              >
+                <X size={14} />
+              </button>
+            )}
+            <button
+              onClick={onEdit}
+              title="Edit"
+              className="p-1 rounded-md text-neutral hover:text-ink hover:bg-background"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              onClick={onDelete}
+              title="Move to trash"
+              className="p-1 rounded-md text-neutral hover:text-error hover:bg-background"
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
         )}
-        {call.status === 'scheduled' && (
-          <button
-            onClick={onCancel}
-            title="Cancel"
-            className="p-1 rounded-md text-neutral hover:text-warning hover:bg-background"
-          >
-            <X size={14} />
-          </button>
-        )}
-        <button
-          onClick={onEdit}
-          title="Edit"
-          className="p-1 rounded-md text-neutral hover:text-ink hover:bg-background"
-        >
-          <Pencil size={13} />
-        </button>
-        <button
-          onClick={onDelete}
-          title="Delete"
-          className="p-1 rounded-md text-neutral hover:text-error hover:bg-background"
-        >
-          <Trash2 size={13} />
-        </button>
       </div>
     </li>
   );
