@@ -67,6 +67,16 @@ export class CallsController {
     return this.calls.remove(id);
   }
 
+  @Post('calls/:id/restore')
+  restore(@Param('id') id: string) {
+    return this.calls.restore(id);
+  }
+
+  @Delete('calls/:id/purge')
+  purge(@Param('id') id: string) {
+    return this.calls.purge(id);
+  }
+
   @Get('leads/:leadId/calls')
   listForLead(@Param('leadId') leadId: string) {
     return this.calls.listForLead(leadId);
@@ -82,11 +92,14 @@ export class CallsController {
       q.bucket && BUCKETS.has(q.bucket as CallBucket)
         ? (q.bucket as CallBucket)
         : undefined;
+    const trash =
+      q.trash === '1' || q.trash === 'true' || q.trash === 'yes';
     return {
       direction,
       outcome,
       status,
       bucket,
+      trash,
       leadId: q.leadId,
       assignedTo: q.assignedTo,
       take: q.take ? Number(q.take) : undefined,

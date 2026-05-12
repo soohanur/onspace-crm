@@ -23,6 +23,8 @@ export interface ListCallsFilter {
   leadId?: string;
   assignedTo?: string;
   bucket?: CallBucket;
+  /** When true, return only soft-deleted (trashed) calls. */
+  trash?: boolean;
   take?: number;
   cursor?: string;
 }
@@ -70,7 +72,7 @@ export class CallsService {
     });
     if (!lead) throw new NotFoundException('Lead not found');
     return this.prisma.call.findMany({
-      where: { leadId },
+      where: { leadId, deletedAt: null },
       orderBy: { occurredAt: 'desc' },
       include: CALL_INCLUDE,
       take: 200,
@@ -96,25 +98,28 @@ export class CallsService {
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [scheduled, today, recent, total] = await Promise.all([
+    const [scheduled, today, recent, total, trash] = await Promise.all([
       this.prisma.call.count({
-        where: { status: 'scheduled', occurredAt: { gt: now } },
+        where: { deletedAt: null, status: 'scheduled', occurredAt: { gt: now } },
       }),
       this.prisma.call.count({
         where: {
+          deletedAt: null,
           status: 'completed',
           occurredAt: { gte: startOfDay, lte: endOfDay },
         },
       }),
       this.prisma.call.count({
         where: {
+          deletedAt: null,
           status: 'completed',
           occurredAt: { gte: sevenDaysAgo },
         },
       }),
-      this.prisma.call.count(),
+      this.prisma.call.count({ where: { deletedAt: null } }),
+      this.prisma.call.count({ where: { deletedAt: { not: null } } }),
     ]);
-    return { scheduled, today, recent, total };
+    return { scheduled, today, recent, total, trash };
   }
 
   // ─── Mutations ─────────────────────────────────────────────────────────
@@ -219,12 +224,46 @@ export class CallsService {
     return updated;
   }
 
+  /** Soft-delete: moves the call to trash. Idempotent if already trashed. */
   async remove(id: string) {
+    const existing = await this.prisma.call.findUnique({
+      where: { id },
+      select: { id: true, deletedAt: true },
+    });
+    if (!existing) throw new NotFoundException('Call not found');
+    if (!existing.deletedAt) {
+      await this.prisma.call.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    }
+    return { ok: true as const };
+  }
+
+  /** Restore a trashed call. */
+  async restore(id: string) {
     const existing = await this.prisma.call.findUnique({
       where: { id },
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Call not found');
+    return this.prisma.call.update({
+      where: { id },
+      data: { deletedAt: null },
+      include: CALL_INCLUDE,
+    });
+  }
+
+  /** Hard-delete: only allowed on already-trashed calls. */
+  async purge(id: string) {
+    const existing = await this.prisma.call.findUnique({
+      where: { id },
+      select: { id: true, deletedAt: true },
+    });
+    if (!existing) throw new NotFoundException('Call not found');
+    if (!existing.deletedAt) {
+      throw new BadRequestException('Move the call to trash before deleting it permanently.');
+    }
     await this.prisma.call.delete({ where: { id } });
     return { ok: true as const };
   }
@@ -234,6 +273,8 @@ export class CallsService {
   private buildWhere(f: ListCallsFilter): Prisma.CallWhereInput {
     const where: Prisma.CallWhereInput = {};
     const AND: Prisma.CallWhereInput[] = [];
+
+    where.deletedAt = f.trash ? { not: null } : null;
 
     if (f.leadId) where.leadId = f.leadId;
     if (f.assignedTo) where.assignedTo = f.assignedTo;
