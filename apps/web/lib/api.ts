@@ -577,6 +577,7 @@ export interface CallsCounts {
   today: number;
   recent: number;
   total: number;
+  trash: number;
 }
 
 // ─── Phase 13: Global Contacts Directory ─────────────────────────────────
@@ -1584,6 +1585,7 @@ export const api = {
     status?: CallStatus[];
     leadId?: string;
     assignedTo?: string;
+    trash?: boolean;
     take?: number;
     cursor?: string;
   } = {}) => {
@@ -1594,6 +1596,7 @@ export const api = {
     if (params.status?.length) qs.set('status', params.status.join(','));
     if (params.leadId) qs.set('leadId', params.leadId);
     if (params.assignedTo) qs.set('assignedTo', params.assignedTo);
+    if (params.trash) qs.set('trash', '1');
     if (params.take) qs.set('take', String(params.take));
     if (params.cursor) qs.set('cursor', params.cursor);
     return request<{ items: Call[]; nextCursor: string | null }>(
@@ -1614,6 +1617,10 @@ export const api = {
     }),
   deleteCall: (id: string) =>
     request<{ ok: true }>(`/calls/${id}`, { method: 'DELETE' }),
+  restoreCall: (id: string) =>
+    request<Call>(`/calls/${id}/restore`, { method: 'POST' }),
+  purgeCall: (id: string) =>
+    request<{ ok: true }>(`/calls/${id}/purge`, { method: 'DELETE' }),
   listLeadCalls: (leadId: string) =>
     request<Call[]>(`/leads/${leadId}/calls`),
 
