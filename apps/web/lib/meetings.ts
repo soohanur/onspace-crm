@@ -31,12 +31,17 @@ export const MEETING_STATUSES: MeetingStatus[] = [
   'no_show',
 ];
 
+// "Serial" tabs in the order the page shows them.
 export const MEETING_BUCKETS: MeetingBucket[] = [
-  'upcoming',
   'today',
-  'past',
+  'upcoming',
+  'missed',
   'cancelled',
+  'completed',
 ];
+
+// Log-style views, shown after a divider.
+export const MEETING_LOG_BUCKETS: MeetingBucket[] = ['this_month', 'all'];
 
 const TYPE_LABELS: Record<MeetingType, string> = {
   phone: 'Phone',
@@ -81,10 +86,13 @@ export function meetingStatusClass(s: MeetingStatus) {
 }
 
 const BUCKET_LABELS: Record<MeetingBucket, string> = {
-  upcoming: 'Upcoming',
   today: 'Today',
-  past: 'Past',
+  upcoming: 'Upcoming',
+  missed: 'Missed',
   cancelled: 'Cancelled',
+  completed: 'Completed',
+  this_month: 'This month',
+  all: 'All meetings',
 };
 export function bucketLabel(b: MeetingBucket) {
   return BUCKET_LABELS[b];

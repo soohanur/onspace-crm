@@ -377,7 +377,14 @@ export interface EmailLog {
 
 export type MeetingType = 'phone' | 'zoom' | 'google_meet' | 'in_person' | 'other';
 export type MeetingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
-export type MeetingBucket = 'upcoming' | 'today' | 'past' | 'cancelled';
+export type MeetingBucket =
+  | 'today'
+  | 'upcoming'
+  | 'missed'
+  | 'cancelled'
+  | 'completed'
+  | 'this_month'
+  | 'all';
 
 export interface Meeting {
   id: string;
@@ -435,10 +442,13 @@ export interface CreateMeetingInput {
 export type UpdateMeetingInput = Partial<Omit<CreateMeetingInput, 'leadId'>>;
 
 export interface MeetingsCounts {
-  upcoming: number;
   today: number;
-  past: number;
+  upcoming: number;
+  missed: number;
   cancelled: number;
+  completed: number;
+  thisMonth: number;
+  all: number;
 }
 
 export interface MeetingConflictSummary {

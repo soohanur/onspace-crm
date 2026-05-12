@@ -22,6 +22,7 @@ import {
 } from '@/lib/api';
 import {
   MEETING_BUCKETS,
+  MEETING_LOG_BUCKETS,
   MEETING_STATUSES,
   MEETING_TYPES,
   bucketLabel,
@@ -33,6 +34,7 @@ import {
   syncBadge,
   whenLabel,
 } from '@/lib/meetings';
+import type { MeetingsCounts } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StageBadge } from '@/components/leads/StageBadge';
@@ -82,11 +84,12 @@ function Body() {
   const sp = useSearchParams();
   const qc = useQueryClient();
 
+  const allBuckets = [...MEETING_BUCKETS, ...MEETING_LOG_BUCKETS];
   const bucket: MeetingBucket =
     (sp.get('bucket') as MeetingBucket) &&
-    MEETING_BUCKETS.includes(sp.get('bucket') as MeetingBucket)
+    allBuckets.includes(sp.get('bucket') as MeetingBucket)
       ? (sp.get('bucket') as MeetingBucket)
-      : 'upcoming';
+      : 'today';
   const typeCsv = sp.get('type') ?? '';
   const types = typeCsv
     .split(',')
@@ -209,36 +212,27 @@ function Body() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs: serial buckets, then a divider, then log views */}
       <div className="flex border-b border-border mb-4 -mx-1 overflow-x-auto scroll-thin">
-        {MEETING_BUCKETS.map((b) => {
-          const count = counts?.[b];
-          const active = b === bucket;
-          return (
-            <button
-              key={b}
-              onClick={() => updateUrl({ bucket: b })}
-              className={clsx(
-                'mx-1 px-4 h-10 text-bodysm font-medium border-b-2 -mb-px inline-flex items-center gap-2 whitespace-nowrap',
-                active
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-ink-muted hover:text-ink',
-              )}
-            >
-              {bucketLabel(b)}
-              <span
-                className={clsx(
-                  'inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded text-[11px] font-mono font-tabular',
-                  active
-                    ? 'bg-primary text-white'
-                    : 'bg-background text-ink-muted',
-                )}
-              >
-                {count ?? '—'}
-              </span>
-            </button>
-          );
-        })}
+        {MEETING_BUCKETS.map((b) => (
+          <BucketTab
+            key={b}
+            b={b}
+            active={b === bucket}
+            count={bucketCount(counts, b)}
+            onClick={() => updateUrl({ bucket: b })}
+          />
+        ))}
+        <span className="self-center mx-2 h-5 w-px bg-border shrink-0" aria-hidden />
+        {MEETING_LOG_BUCKETS.map((b) => (
+          <BucketTab
+            key={b}
+            b={b}
+            active={b === bucket}
+            count={bucketCount(counts, b)}
+            onClick={() => updateUrl({ bucket: b })}
+          />
+        ))}
       </div>
 
       {/* Filter row */}
@@ -587,5 +581,62 @@ function StatusChips({
         )}
       </div>
     </div>
+  );
+}
+
+function bucketCount(
+  counts: MeetingsCounts | undefined,
+  b: MeetingBucket,
+): number | undefined {
+  if (!counts) return undefined;
+  switch (b) {
+    case 'today':
+      return counts.today;
+    case 'upcoming':
+      return counts.upcoming;
+    case 'missed':
+      return counts.missed;
+    case 'cancelled':
+      return counts.cancelled;
+    case 'completed':
+      return counts.completed;
+    case 'this_month':
+      return counts.thisMonth;
+    case 'all':
+      return counts.all;
+  }
+}
+
+function BucketTab({
+  b,
+  active,
+  count,
+  onClick,
+}: {
+  b: MeetingBucket;
+  active: boolean;
+  count: number | undefined;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'mx-1 px-4 h-10 text-bodysm font-medium border-b-2 -mb-px inline-flex items-center gap-2 whitespace-nowrap',
+        active
+          ? 'border-primary text-primary'
+          : 'border-transparent text-ink-muted hover:text-ink',
+      )}
+    >
+      {bucketLabel(b)}
+      <span
+        className={clsx(
+          'inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded text-[11px] font-mono font-tabular',
+          active ? 'bg-primary text-white' : 'bg-background text-ink-muted',
+        )}
+      >
+        {count ?? '—'}
+      </span>
+    </button>
   );
 }
