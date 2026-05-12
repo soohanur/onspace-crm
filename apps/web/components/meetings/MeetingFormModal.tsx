@@ -66,7 +66,7 @@ export function MeetingFormModal({
   const [form, setForm] = useState<CreateMeetingInput & { status?: MeetingStatus }>({
     leadId: '',
     title: '',
-    type: 'phone',
+    type: 'zoom',
     scheduledAt: '',
     durationMin: 30,
     attendeeEmails: [],
@@ -86,7 +86,7 @@ export function MeetingFormModal({
       contactId: initial?.contactId ?? undefined,
       accountId: lockedAccountId ?? initial?.accountId ?? undefined,
       title: initial?.title ?? '',
-      type: initial?.type ?? 'phone',
+      type: initial?.type ?? 'zoom',
       meetingLink: initial?.meetingLink ?? '',
       scheduledAt: initial?.scheduledAt ?? '',
       durationMin: initial?.durationMin ?? 30,
@@ -317,7 +317,7 @@ export function MeetingFormModal({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Type">
               <Select
-                value={form.type ?? 'phone'}
+                value={form.type ?? 'zoom'}
                 onChange={(v) => setForm({ ...form, type: v as MeetingType })}
                 options={MEETING_TYPES}
                 labels={(v) => meetingTypeLabel(v as MeetingType)}
@@ -357,7 +357,7 @@ export function MeetingFormModal({
               placeholder={
                 form.type === 'google_meet' && !isEdit
                   ? 'Auto-generated when you save'
-                  : TYPE_LINK_PLACEHOLDER[form.type ?? 'phone']
+                  : TYPE_LINK_PLACEHOLDER[form.type ?? 'zoom']
               }
             />
             {form.type === 'google_meet' && !form.meetingLink && (
@@ -581,7 +581,7 @@ export function MeetingFormModal({
                           : defaultInviteBody({
                               title: form.title,
                               notes: form.notes,
-                              type: form.type ?? 'phone',
+                              type: form.type ?? 'zoom',
                               meetingLink: form.meetingLink ?? '',
                               scheduledAt: form.scheduledAt,
                               durationMin: form.durationMin ?? 30,

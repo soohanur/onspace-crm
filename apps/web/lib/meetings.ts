@@ -15,8 +15,9 @@ import type {
   MeetingType,
 } from './api';
 
+// 'phone' is no longer offered as a new-meeting type (Zoom / Meet / in-person
+// cover the cases). Legacy 'phone' rows still render via the label/icon maps.
 export const MEETING_TYPES: MeetingType[] = [
-  'phone',
   'zoom',
   'google_meet',
   'in_person',
