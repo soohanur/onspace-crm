@@ -777,6 +777,8 @@ model Call {
   voicemailLeft  Boolean        @default(false) @map("voicemail_left")
   /// Captured action item from the call ("send proposal", "schedule demo").
   nextAction     String?        @map("next_action")
+  /// Soft-delete: non-null = in trash. Hard delete only on explicit purge.
+  deletedAt      DateTime?      @map("deleted_at")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt      @map("updated_at")
 
@@ -786,6 +788,7 @@ model Call {
   @@index([leadId])
   @@index([occurredAt])
   @@index([direction, status])
+  @@index([deletedAt])
   @@map("calls")
 }
 
