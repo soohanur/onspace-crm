@@ -35,10 +35,13 @@ const TYPES = new Set<MeetingType>([
   'other',
 ]);
 const BUCKETS = new Set<MeetingBucket>([
-  'upcoming',
   'today',
-  'past',
+  'upcoming',
+  'missed',
   'cancelled',
+  'completed',
+  'this_month',
+  'all',
 ]);
 
 @Controller()

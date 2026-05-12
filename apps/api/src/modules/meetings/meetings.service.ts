@@ -18,7 +18,14 @@ import { GoogleCalendarService } from '../email/google-calendar.service';
 import { accountHasCalendarScope } from '../email/scopes';
 import { CreateMeetingDto, UpdateMeetingDto } from './dto';
 
-export type MeetingBucket = 'upcoming' | 'today' | 'past' | 'cancelled';
+export type MeetingBucket =
+  | 'today'
+  | 'upcoming'
+  | 'missed'
+  | 'cancelled'
+  | 'completed'
+  | 'this_month'
+  | 'all';
 
 export interface ListMeetingsFilter {
   status?: MeetingStatus[];
@@ -213,25 +220,35 @@ export class MeetingsService {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const [upcoming, today, past, cancelled] = await Promise.all([
-      this.prisma.meeting.count({
-        where: { status: 'scheduled', scheduledAt: { gt: now } },
-      }),
-      this.prisma.meeting.count({
-        where: {
-          status: 'scheduled',
-          scheduledAt: { gte: startOfDay, lte: endOfDay },
-        },
-      }),
-      this.prisma.meeting.count({
-        where: {
-          scheduledAt: { lt: now },
-          status: { in: ['completed', 'no_show', 'scheduled'] },
-        },
-      }),
-      this.prisma.meeting.count({ where: { status: 'cancelled' } }),
-    ]);
-    return { upcoming, today, past, cancelled };
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const [today, upcoming, missed, cancelled, completed, thisMonth, all] =
+      await Promise.all([
+        this.prisma.meeting.count({
+          where: {
+            status: 'scheduled',
+            scheduledAt: { gte: startOfDay, lte: endOfDay },
+          },
+        }),
+        this.prisma.meeting.count({
+          where: { status: 'scheduled', scheduledAt: { gt: endOfDay } },
+        }),
+        this.prisma.meeting.count({
+          where: {
+            OR: [
+              { status: 'no_show' },
+              { status: 'scheduled', scheduledAt: { lt: startOfDay } },
+            ],
+          },
+        }),
+        this.prisma.meeting.count({ where: { status: 'cancelled' } }),
+        this.prisma.meeting.count({ where: { status: 'completed' } }),
+        this.prisma.meeting.count({
+          where: { scheduledAt: { gte: startOfMonth, lt: startOfNextMonth } },
+        }),
+        this.prisma.meeting.count(),
+      ]);
+    return { today, upcoming, missed, cancelled, completed, thisMonth, all };
   }
 
   // ─── Mutations ─────────────────────────────────────────────────────────
@@ -884,28 +901,42 @@ export class MeetingsService {
     if (f.status?.length) where.status = { in: f.status };
     if (f.type?.length) where.type = { in: f.type };
 
-    if (f.bucket) {
+    if (f.bucket && f.bucket !== 'all') {
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       switch (f.bucket) {
-        case 'upcoming':
-          AND.push({ status: 'scheduled', scheduledAt: { gt: now } });
-          break;
         case 'today':
           AND.push({
             status: 'scheduled',
             scheduledAt: { gte: startOfDay, lte: endOfDay },
           });
           break;
-        case 'past':
+        case 'upcoming':
+          AND.push({ status: 'scheduled', scheduledAt: { gt: endOfDay } });
+          break;
+        case 'missed':
+          // Marked no-show, or a still-"scheduled" meeting whose time
+          // has passed (before today).
           AND.push({
-            scheduledAt: { lt: now },
-            status: { in: ['completed', 'no_show', 'scheduled'] },
+            OR: [
+              { status: 'no_show' },
+              { status: 'scheduled', scheduledAt: { lt: startOfDay } },
+            ],
           });
           break;
         case 'cancelled':
           AND.push({ status: 'cancelled' });
+          break;
+        case 'completed':
+          AND.push({ status: 'completed' });
+          break;
+        case 'this_month':
+          AND.push({
+            scheduledAt: { gte: startOfMonth, lt: startOfNextMonth },
+          });
           break;
       }
     }
