@@ -19,7 +19,12 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Monitor,
+  Moon,
+  Sun,
 } from 'lucide-react';
+import clsx from 'clsx';
+import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 
 export default function SettingsPage() {
   return (
@@ -71,6 +76,9 @@ function SettingsPageBody() {
           Workspace preferences and connected services.
         </p>
       </div>
+
+      {/* Appearance / theme */}
+      <AppearanceCard />
 
       {/* OAuth callback banners */}
       {oauthFlag === 'ok' && (
@@ -444,6 +452,58 @@ function OAuthErrorCard({
             </div>
           )}
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function AppearanceCard() {
+  const { mode, setMode, resolved } = useTheme();
+  const options: { value: ThemeMode; label: string; Icon: typeof Sun; desc: string }[] = [
+    { value: 'light', label: 'Light', Icon: Sun, desc: 'Always light' },
+    { value: 'dark', label: 'Dark', Icon: Moon, desc: 'Always dark' },
+    { value: 'system', label: 'System', Icon: Monitor, desc: 'Follow OS' },
+  ];
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <h2 className="text-h3 mb-0.5">Appearance</h2>
+          <p className="text-ink-muted text-bodysm">
+            Pick a theme. System follows your OS preference live —
+            currently resolved to <span className="font-medium text-ink">{resolved}</span>.
+          </p>
+        </div>
+      </div>
+      <div
+        role="radiogroup"
+        aria-label="Theme"
+        className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+      >
+        {options.map(({ value, label, Icon, desc }) => {
+          const active = mode === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setMode(value)}
+              className={clsx(
+                'flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                active
+                  ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                  : 'border-border bg-surface hover:border-primary/40',
+              )}
+            >
+              <Icon size={16} className={active ? 'text-primary' : 'text-ink-muted'} />
+              <div className="min-w-0">
+                <div className="text-bodysm font-medium text-ink">{label}</div>
+                <div className="text-caption text-ink-muted">{desc}</div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
