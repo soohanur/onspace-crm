@@ -1,7 +1,11 @@
 import type { Config } from 'tailwindcss';
 
-// Crypto Blue design system tokens.
+// Theme tokens live in app/globals.css as RGB triplets so `bg-x/40` keeps
+// working. .dark class on <html> swaps to the Funda dark palette.
+const v = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
+  darkMode: 'class',
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
@@ -12,23 +16,24 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#0052FF',
-          hover: '#003ECB',
+          DEFAULT: v('--c-primary'),
+          hover: v('--c-primary-hover'),
         },
-        secondary: '#5B616E',
-        neutral: '#8A919E',
-        background: '#F9FAFB',
-        surface: '#FFFFFF',
+        secondary: v('--c-secondary'),
+        neutral: v('--c-neutral'),
+        background: v('--c-background'),
+        surface: v('--c-surface'),
+        'surface-2': v('--c-surface-2'),
         ink: {
-          DEFAULT: '#050F1A',
-          muted: '#5B616E',
+          DEFAULT: v('--c-ink'),
+          muted: v('--c-ink-muted'),
         },
-        border: '#D1D5DB',
-        success: '#05B169',
-        successBg: '#E6F6EF',
-        warning: '#F0AD4E',
-        error: '#DF2935',
-        errorBg: '#FDECEE',
+        border: v('--c-border'),
+        success: v('--c-success'),
+        successBg: v('--c-success-bg'),
+        warning: v('--c-warning'),
+        error: v('--c-error'),
+        errorBg: v('--c-error-bg'),
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -44,10 +49,11 @@ const config: Config = {
         caption: ['12px', { lineHeight: '1.5', fontWeight: '500' }],
       },
       borderRadius: {
-        sm: '4px',
-        md: '8px',
-        lg: '12px',
-        xl: '16px',
+        sm: '6px',
+        md: '10px',
+        lg: '14px',
+        xl: '18px',
+        '2xl': '22px',
       },
       boxShadow: {
         e1: '0 1px 3px rgba(5,15,26,0.06)',
