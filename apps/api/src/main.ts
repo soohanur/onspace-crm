@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -20,6 +21,9 @@ async function bootstrap() {
   });
 
   app.use(cookieParser());
+  // Allow avatar data-URIs (~ 350 KB after client-side resize).
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ limit: '1mb', extended: true }));
 
   app.useGlobalPipes(
     new ValidationPipe({

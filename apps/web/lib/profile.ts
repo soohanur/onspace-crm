@@ -16,8 +16,15 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface UpdateProfilePayload {
+  name?: string;
+  avatarUrl?: string | null;
+  jobTitle?: string | null;
+}
+
 export const profileApi = {
-  updateName: (name: string) => call('/profile', { method: 'PATCH', body: JSON.stringify({ name }) }),
+  update: (payload: UpdateProfilePayload) =>
+    call('/profile', { method: 'PATCH', body: JSON.stringify(payload) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     call('/profile/password', {
       method: 'POST',

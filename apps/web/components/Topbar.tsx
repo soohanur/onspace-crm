@@ -8,7 +8,6 @@ import {
   LogOut,
   Menu,
   PanelLeftClose,
-  ShieldCheck,
   UserCircle2,
 } from 'lucide-react';
 
@@ -73,11 +72,16 @@ export function Topbar() {
         <div className="relative" ref={popRef}>
           <button
             onClick={() => setOpen((v) => !v)}
-            className="h-9 w-9 rounded-full bg-primary text-white text-bodysm font-bold flex items-center justify-center hover:opacity-90"
+            className="h-9 w-9 rounded-full bg-primary text-white text-bodysm font-bold flex items-center justify-center hover:opacity-90 overflow-hidden"
             aria-label="Account menu"
             title={ctx?.user.email}
           >
-            {initials}
+            {ctx?.user.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={ctx.user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
           </button>
 
           {open && ctx && (
@@ -94,17 +98,6 @@ export function Topbar() {
                 <MenuLink href="/profile" icon={<UserCircle2 size={16} />} onClick={() => setOpen(false)}>
                   Profile & settings
                 </MenuLink>
-
-                {ctx.user.isPlatformAdmin && (
-                  <MenuLink
-                    href="/admin"
-                    icon={<ShieldCheck size={16} />}
-                    onClick={() => setOpen(false)}
-                    accent
-                  >
-                    Admin panel
-                  </MenuLink>
-                )}
 
                 <button
                   onClick={handleSignOut}

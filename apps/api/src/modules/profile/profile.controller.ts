@@ -1,7 +1,7 @@
 import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 
 import { AuthGuard } from '../auth/auth.guard';
-import { CurrentUser } from '../auth/auth.decorators';
+import { CurrentMember, CurrentUser } from '../auth/auth.decorators';
 import { ChangePasswordDto, UpdateProfileDto } from './profile.dto';
 import { ProfileService } from './profile.service';
 
@@ -11,8 +11,12 @@ export class ProfileController {
   constructor(private readonly profile: ProfileService) {}
 
   @Patch()
-  update(@CurrentUser() user: { id: string }, @Body() dto: UpdateProfileDto) {
-    return this.profile.update(user.id, dto);
+  update(
+    @CurrentUser() user: { id: string },
+    @CurrentMember() member: { id: string } | null,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.profile.update(user.id, member?.id ?? null, dto);
   }
 
   @Post('password')

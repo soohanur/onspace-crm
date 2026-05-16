@@ -117,7 +117,7 @@ export class AuthService {
   }
 
   private async buildContext(args: {
-    user: { id: string; email: string; name: string; isPlatformAdmin: boolean };
+    user: { id: string; email: string; name: string; avatarUrl: string | null; isPlatformAdmin: boolean };
     membership: { id: string; roleId: string; status: string; jobTitle: string | null };
     workspace: { id: string; slug: string; name: string; status: string };
     role: { id: string; key: string; name: string; permissions: string[] };
@@ -143,6 +143,7 @@ export class AuthService {
         id: args.user.id,
         email: args.user.email,
         name: args.user.name,
+        avatarUrl: args.user.avatarUrl,
         isPlatformAdmin: args.user.isPlatformAdmin,
       },
       member: {

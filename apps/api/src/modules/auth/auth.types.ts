@@ -21,6 +21,7 @@ export interface AuthenticatedRequestContext {
     id: string;
     email: string;
     name: string;
+    avatarUrl: string | null;
     isPlatformAdmin: boolean;
   };
   member: {
