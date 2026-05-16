@@ -33,10 +33,23 @@ import { SequencesModule } from './modules/sequences/sequences.module';
       envFilePath: ['.env', '../../.env'],
     }),
     BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST ?? 'localhost',
-        port: Number(process.env.REDIS_PORT ?? 6379),
-      },
+      // Supports both local plain Redis and TLS-wrapped managed providers
+      // (Upstash uses rediss://). If REDIS_URL is set, it wins; otherwise we
+      // fall back to discrete host/port/password (+ optional TLS) env vars.
+      connection: (() => {
+        const url = process.env.REDIS_URL;
+        if (url) {
+          // ioredis parses rediss://… and enables TLS automatically.
+          return { url } as any;
+        }
+        const useTls = String(process.env.REDIS_TLS ?? '').toLowerCase() === 'true';
+        return {
+          host: process.env.REDIS_HOST ?? 'localhost',
+          port: Number(process.env.REDIS_PORT ?? 6379),
+          ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
+          ...(useTls ? { tls: {} } : {}),
+        };
+      })(),
     }),
     PrismaModule,
     AuthModule,
