@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Onspace — Vision & Master Plan</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --bg-2: #11141a;
+    --panel: #151920;
+    --panel-2: #1c2128;
+    --border: #262b34;
+    --border-2: #323844;
+    --text: #e6e8ec;
+    --text-dim: #9aa3af;
+    --muted: #6b7280;
+    --accent: #6ee7b7;
+    --accent-2: #38bdf8;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --ok: #34d399;
+    --chip: #1f2937;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 10px 30px rgba(0,0,0,.35);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  body { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  aside {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    background: linear-gradient(180deg, #0d1015, #0a0c10);
+    border-right: 1px solid var(--border);
+    padding: 22px 18px;
+  }
+  .brand { display:flex; align-items:center; gap:10px; padding: 6px 8px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .brand .dot { width:10px; height:10px; border-radius:50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+  .brand b { letter-spacing: .3px; }
+  .brand small { color: var(--text-dim); margin-left:auto; font-size: 11px; }
+  nav ol { list-style: none; padding: 0; margin: 0; counter-reset: n; }
+  nav li { counter-increment: n; }
+  nav a {
+    display:flex; align-items:center; gap:10px;
+    padding: 8px 10px; margin: 2px 0; border-radius: 8px;
+    color: var(--text-dim); text-decoration: none; font-size: 13.5px;
+    border: 1px solid transparent;
+  }
+  nav a:before {
+    content: counter(n, decimal-leading-zero);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    width: 26px; text-align: right;
+  }
+  nav a:hover { color: var(--text); background: var(--panel); border-color: var(--border); }
+  nav a.active { color: var(--accent); background: var(--panel-2); border-color: var(--border-2); }
+
+  .toolbar {
+    position: sticky; bottom: 0; margin-top: 18px; padding: 12px 8px;
+    background: linear-gradient(180deg, transparent, #0a0c10 30%);
+    display: grid; gap: 8px;
+  }
+  .btn {
+    appearance: none; border: 1px solid var(--border-2); background: var(--panel);
+    color: var(--text); padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 13px;
+    display: inline-flex; align-items:center; justify-content:center; gap: 8px;
+  }
+  .btn:hover { background: var(--panel-2); }
+  .btn.primary { background: linear-gradient(180deg, #14532d, #064e3b); border-color: #14532d; color: #d1fae5; }
+  .btn.warn { background: #3b2f0a; border-color: #5b4a14; color: #fde68a; }
+  .btn.ghost { background: transparent; }
+  .btn .k { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 6px; }
+
+  /* Main */
+  main { padding: 28px 36px 80px; max-width: 1100px; }
+  header.page {
+    display:flex; align-items:flex-end; justify-content:space-between; gap: 20px;
+    padding-bottom: 22px; border-bottom: 1px solid var(--border); margin-bottom: 26px;
+  }
+  header.page h1 { font-size: 30px; margin: 0; letter-spacing: -.4px; }
+  header.page p { color: var(--text-dim); margin: 6px 0 0; }
+  .meta { display:flex; gap:8px; flex-wrap: wrap; }
+  .chip {
+    background: var(--chip); color: var(--text-dim); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono);
+  }
+  .chip.ok { color: var(--ok); border-color: #064e3b; }
+  .chip.warn { color: var(--warn); border-color: #5b4a14; }
+  .chip.info { color: var(--accent-2); border-color: #0c4a6e; }
+
+  section {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; margin: 18px 0; box-shadow: var(--shadow);
+  }
+  section > h2 {
+    margin: 0 0 4px; font-size: 20px; letter-spacing: -.2px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  section > .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 14px; }
+  section .editable {
+    border-radius: var(--radius-sm); padding: 6px 8px; margin: 0 -8px;
+    outline: none; transition: background .15s, box-shadow .15s;
+  }
+  section .editable:focus { background: var(--panel-2); box-shadow: 0 0 0 1px var(--border-2); }
+  h3 { margin: 18px 0 8px; font-size: 15px; color: var(--text); }
+  h4 { margin: 14px 0 6px; font-size: 13.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .6px; }
+  p { line-height: 1.65; color: #d1d5db; }
+  ul, ol { line-height: 1.7; color: #d1d5db; }
+  li { margin: 3px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: #0e1218; border: 1px solid var(--border); padding: 1px 6px; border-radius: 6px; color: #e5e7eb; }
+  pre { font-family: var(--mono); font-size: 12.5px; background: #0a0d12; border: 1px solid var(--border); padding: 14px; border-radius: 10px; overflow-x: auto; line-height: 1.55; }
+  blockquote { border-left: 3px solid var(--accent); padding: 4px 14px; color: var(--text-dim); margin: 10px 0; background: var(--panel-2); border-radius: 0 8px 8px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 6px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--panel-2); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .card h4 { margin: 0 0 6px; color: var(--text); text-transform: none; letter-spacing: 0; font-size: 14px; }
+  .card p { margin: 0; font-size: 13px; color: var(--text-dim); }
+
+  .kbd { font-family: var(--mono); font-size: 11px; padding: 2px 6px; border: 1px solid var(--border-2); border-bottom-width: 2px; border-radius: 6px; background: var(--panel-2); color: var(--text-dim); }
+
+  .toast {
+    position: fixed; bottom: 22px; right: 22px; background: var(--panel-2); border:1px solid var(--border-2);
+    padding: 10px 14px; border-radius: 10px; font-size: 13px; color: var(--text);
+    opacity: 0; transform: translateY(6px); transition: .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .edit-on .editable { background: #0e1622; box-shadow: inset 0 0 0 1px #1e3a5f; }
+  .edit-on .editable:hover { box-shadow: inset 0 0 0 1px var(--accent-2); }
+
+  @media (max-width: 900px) {
+    body { grid-template-columns: 1fr; }
+    aside { position: relative; height: auto; }
+    main { padding: 22px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <span class="dot"></span><b>Onspace</b><small>v1 vision</small>
+  </div>
+  <nav id="toc">
+    <ol>
+      <li><a href="#prompt">Original briefs (refined)</a></li>
+      <li><a href="#vision">Vision & North Star</a></li>
+      <li><a href="#audience">Target audience</a></li>
+      <li><a href="#products">Product portfolio</a></li>
+      <li><a href="#arch">Architecture</a></li>
+      <li><a href="#admin">Admin Panel control</a></li>
+      <li><a href="#tenancy">Tenancy & isolation</a></li>
+      <li><a href="#rbac">RBAC & feature gating</a></li>
+      <li><a href="#offline">Offline-first & sync</a></li>
+      <li><a href="#perf">Performance</a></li>
+      <li><a href="#stack">Tech stack</a></li>
+      <li><a href="#hosting">Hosting (BD-affordable)</a></li>
+      <li><a href="#subs">Subscription (offline)</a></li>
+      <li><a href="#sec">Security & compliance</a></li>
+      <li><a href="#crm-migrate">OnspaceCRM → product module</a></li>
+      <li><a href="#roadmap">Build roadmap</a></li>
+      <li><a href="#risks">Risks & mitigation</a></li>
+      <li><a href="#sales">Sales motion</a></li>
+      <li><a href="#future">Future expansion</a></li>
+    </ol>
+  </nav>
+  <div class="toolbar">
+    <button class="btn primary" id="btn-edit">Toggle edit <span class="k">E</span></button>
+    <button class="btn" id="btn-save">Save locally <span class="k">S</span></button>
+    <button class="btn" id="btn-export">Export HTML</button>
+    <button class="btn warn" id="btn-reset">Reset to default</button>
+  </div>
+</aside>
+
+<main>
+  <header class="page">
+    <div>
+      <h1 contenteditable="false" class="editable">Onspace — Vision & Master Plan</h1>
+      <p contenteditable="false" class="editable">Multi-product SaaS for SME — CRM, ERP, Accounting, Restaurant, Super Shop — single admin panel, offline-first, BD-friendly cost.</p>
+    </div>
+    <div class="meta">
+      <span class="chip info">build: solo + Claude Opus 4.7</span>
+      <span class="chip ok">deal: offline</span>
+      <span class="chip warn">stage: pre-MVP</span>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section id="prompt">
+    <h2>1 · Original briefs — refined</h2>
+    <div class="sub">User prompts combined and cleaned. Editable.</div>
+    <div class="editable" contenteditable="false">
+      <h4>Brief A — Hosting for dev/demo</h4>
+      <p>Need free or cheap hosting for OnspaceCRM (Next.js + NestJS + Postgres + Redis + Python Playwright) so client can review production-like environment. Hostinger subdomain available for frontend dist. Need free dev solution for backend and DB. Same stack will run wider SaaS portfolio (CRM, ERP, restaurant, accounting) under one shelter — subscription-based service.</p>
+
+      <h4>Brief B — Multi-tenant SaaS shape</h4>
+      <p>Sell web apps to companies: restaurants, super shops, services. All products live under one master admin panel. From the admin panel we create new customer workspaces, decide how many users they can invite, and select which features they can access. Multi-user + role-based access inside each workspace. Easy to plug new product/feature later.</p>
+
+      <h4>Brief C — Performance & payment</h4>
+      <p>System must feel lightspeed for company use — no click lag, no jitter, no bugs. No online payment for now: subscription deals close offline; we manually configure workspace + features after agreement; customer logs in and works online.</p>
+
+      <h4>Brief D — Build approach & infra constraints</h4>
+      <p>Build all products first, then sell manually to targeted audience (SME, eventually large enterprise reference letters). Entire build driven by Claude Opus 4.7 + manual polish. Must scale, but must run on a low-cost Bangladeshi server budget. Web app must keep working offline; data syncs on reconnect.</p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="vision">
+    <h2>2 · Vision & North Star</h2>
+    <div class="sub">One sentence we anchor every decision to.</div>
+    <div class="editable" contenteditable="false">
+      <blockquote>
+        Onspace is a single, locally affordable SaaS platform that gives every SME in Bangladesh — and later the region — production-grade business software (CRM, ERP, Accounting, Restaurant, Super Shop) under one login, controlled centrally by us, that keeps working even when their internet does not.
+      </blockquote>
+      <h4>Three-year ambition</h4>
+      <ul>
+        <li>10,000+ SME workspaces on the platform.</li>
+        <li>≥ 5 in-house products, all sharing one core (auth, billing, RBAC, audit, sync).</li>
+        <li>Offline-first PWA usable from a phone in a market stall.</li>
+        <li>Servers, support, language and pricing tuned for Bangladesh first, then SAARC.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="audience">
+    <h2>3 · Target audience</h2>
+    <div class="editable" contenteditable="false">
+      <div class="grid-3">
+        <div class="card"><h4>Restaurants & cafes</h4><p>POS, table mgmt, KOT, inventory, daily Z-report. 5–50 staff.</p></div>
+        <div class="card"><h4>Super shops & retail</h4><p>Barcode billing, stock, supplier ledger, expiry alerts.</p></div>
+        <div class="card"><h4>Service SMEs</h4><p>CRM, leads, invoices, follow-ups. Agencies, brokers, clinics.</p></div>
+        <div class="card"><h4>Trading / wholesale</h4><p>ERP-lite: orders, inventory across godowns, accounting.</p></div>
+        <div class="card"><h4>NGO / institutions</h4><p>Member CRM, donations, basic accounting.</p></div>
+        <div class="card"><h4>Mid-market reference</h4><p>1–2 big logos signed manually as proof for marketing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="products">
+    <h2>4 · Product portfolio (modular)</h2>
+    <div class="editable" contenteditable="false">
+      <p>Each product is a module under one platform. Same login, same workspace, same audit log. Toggleable per workspace.</p>
+      <table>
+        <thead><tr><th>Key</th><th>Product</th><th>Core features</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><code>crm</code></td><td>OnspaceCRM</td><td>Leads, scraping, groups, notes, email, tasks, pipeline</td><td><span class="chip ok">in progress</span></td></tr>
+          <tr><td><code>erp</code></td><td>Onspace ERP</td><td>Inventory, purchase, sales orders, godowns</td><td><span class="chip warn">planned</span></td></tr>
+          <tr><td><code>acc</code></td><td>Onspace Accounting</td><td>COA, journal, ledger, P&L, balance sheet, VAT</td><td><span class="chip warn">planned</span></td></tr>
+          <tr><td><code>resto</code></td><td>Onspace Restaurant</td><td>POS, KOT, table, menu, kitchen display</td><td><span class="chip warn">planned</span></td></tr>
+          <tr><td><code>shop</code></td><td>Onspace Super Shop</td><td>Barcode POS, stock, supplier, expiry</td><td><span class="chip warn">planned</span></td></tr>
+          <tr><td><code>hrm</code></td><td>Onspace HRM (future)</td><td>Attendance, payroll, leave</td><td><span class="chip">future</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="arch">
+    <h2>5 · Architecture</h2>
+    <div class="editable" contenteditable="false">
+      <p>Modular monolith on NestJS. Platform-core handles auth, workspace, RBAC, feature flags, subscription, audit. Each product = isolated module folder, shares the core.</p>
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│  ADMIN PANEL  (only us — internal)                          │
+│   - Create workspace                                        │
+│   - Enable products + features per workspace                │
+│   - Set user seat limit                                     │
+│   - Set subscription window                                 │
+│   - Suspend / impersonate / audit                           │
+└──────────────────────────┬──────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  PLATFORM CORE  (shared by all products)                    │
+│  Auth · Workspace · Members · Role · Permission             │
+│  Product · Feature · WorkspaceProduct · WorkspaceFeature    │
+│  Subscription · AuditLog · Sync engine · Notification       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+   ┌────────┬────────┬─────┴─────┬────────┬────────┐
+   ▼        ▼        ▼           ▼        ▼        ▼
+  CRM     ERP    Accounting  Restaurant Shop      HRM
+</pre>
+      <h4>Frontend shape</h4>
+      <ul>
+        <li>Single Next.js app — shell renders only the products+features the workspace has.</li>
+        <li>Per-product code-split bundle so cold load is small.</li>
+        <li>Admin panel = route group <code>/admin</code> guarded by <code>user.isAdmin</code>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="admin">
+    <h2>6 · Admin Panel — what it controls</h2>
+    <div class="editable" contenteditable="false">
+      <ul>
+        <li><b>Workspaces:</b> create, rename, suspend, delete, impersonate.</li>
+        <li><b>Products per workspace:</b> tick which products are enabled (CRM, ERP, …).</li>
+        <li><b>Features per workspace:</b> inside each product, tick allowed features (e.g. CRM email send on/off).</li>
+        <li><b>User seats:</b> set max user count per workspace.</li>
+        <li><b>Roles:</b> default roles seeded; admin can craft custom roles for a workspace.</li>
+        <li><b>Subscription:</b> plan name, start/expiry date, status, notes (deal terms).</li>
+        <li><b>Branding:</b> per-workspace logo, color, business name on invoices.</li>
+        <li><b>Audit log:</b> every write — who / what / when, filterable.</li>
+        <li><b>Usage:</b> DB rows used, storage used, API calls — for capacity planning.</li>
+        <li><b>Health:</b> failed jobs, slow queries, sync backlog per workspace.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="tenancy">
+    <h2>7 · Tenancy & data isolation</h2>
+    <div class="editable" contenteditable="false">
+      <p><b>Chosen model:</b> shared Postgres database + <code>workspaceId</code> column on every tenant row + Postgres Row-Level Security policies.</p>
+      <ul>
+        <li>One DB cluster → one cost, one backup, one migration.</li>
+        <li>Every Prisma query auto-scoped via middleware (<code>SET LOCAL app.workspace_id</code>).</li>
+        <li>RLS enforces isolation even if a developer forgets a <code>where</code>.</li>
+        <li>Scales to thousands of SMEs on a single cheap VPS.</li>
+        <li>Optional escape hatch later: heavy/enterprise tenant → dedicated DB by flipping a <code>tenant.dbUrl</code> field.</li>
+      </ul>
+      <h4>Tables added to platform core</h4>
+<pre>
+User · Workspace · WorkspaceMember · Role
+Product · Feature · WorkspaceProduct · WorkspaceFeature
+Subscription · AuditLog · SyncCursor · OutboxEvent
+</pre>
+      <h4>Tables changed in OnspaceCRM</h4>
+      <p>Add <code>workspaceId String</code> + composite index <code>(workspaceId, createdAt)</code> on: Lead, Group, Note, Contact, Task, ScrapeJob, Search, EmailMessage, etc.</p>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="rbac">
+    <h2>8 · RBAC & feature gating</h2>
+    <div class="editable" contenteditable="false">
+      <p>Permission strings shaped as <code>&lt;product&gt;.&lt;resource&gt;.&lt;action&gt;</code> — e.g. <code>crm.lead.write</code>, <code>erp.invoice.approve</code>.</p>
+      <h4>Three-layer gate on every request</h4>
+      <ol>
+        <li><b>Subscription guard:</b> workspace subscription active and not expired.</li>
+        <li><b>Feature guard:</b> workspace has this feature enabled.</li>
+        <li><b>Permission guard:</b> user's role includes this permission string.</li>
+      </ol>
+      <h4>Default roles seeded per workspace</h4>
+      <ul>
+        <li><b>Owner</b> — all permissions, billing visibility.</li>
+        <li><b>Admin</b> — all except billing.</li>
+        <li><b>Manager</b> — per-product manage rights.</li>
+        <li><b>Staff</b> — read + create, no destructive ops.</li>
+        <li><b>Viewer</b> — read-only.</li>
+      </ul>
+      <p>Custom roles editable from Admin Panel + from workspace owner panel (limited).</p>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="offline">
+    <h2>9 · Offline-first & sync</h2>
+    <div class="editable" contenteditable="false">
+      <p>Critical for Bangladeshi SMEs — power cuts, weak mobile data, market-stall use. Plan:</p>
+      <h4>Client side</h4>
+      <ul>
+        <li>Next.js installable PWA + service worker (Workbox).</li>
+        <li>Local store: <b>IndexedDB via Dexie</b> mirroring tables the user touches (leads, invoices, products, customers).</li>
+        <li>Every mutation written first to local DB, then queued to <b>outbox</b> table with UUIDv7 + clientTimestamp.</li>
+        <li>UI reads from local store → zero-latency clicks even online.</li>
+      </ul>
+      <h4>Sync engine</h4>
+      <ul>
+        <li>On reconnect, outbox flushed to <code>POST /sync/push</code> in batches.</li>
+        <li>Server returns canonical IDs + version vector.</li>
+        <li>Server pushes server-side changes via <code>GET /sync/pull?since=cursor</code> (long-poll or SSE).</li>
+        <li>Conflicts → last-write-wins by default, manual resolve UI for high-value entities (invoices).</li>
+        <li>Each row has <code>updatedAt</code> + <code>version</code> + <code>updatedBy</code>; deletes are soft (tombstones) so clients can converge.</li>
+      </ul>
+      <h4>Library options (pick one)</h4>
+      <table>
+        <thead><tr><th>Option</th><th>Effort</th><th>Cost</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Custom outbox + Dexie</td><td>Medium</td><td>Free</td><td>Full control, fits Postgres+Nest cleanly. <b>Recommended.</b></td></tr>
+          <tr><td>PowerSync</td><td>Low</td><td>Free tier then paid</td><td>Drop-in Postgres↔SQLite sync.</td></tr>
+          <tr><td>ElectricSQL</td><td>Low</td><td>OSS</td><td>Reactive Postgres sync, newer.</td></tr>
+          <tr><td>Replicache</td><td>Medium</td><td>Paid</td><td>Strong DX, license cost.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="perf">
+    <h2>10 · Performance — lightspeed feel</h2>
+    <div class="editable" contenteditable="false">
+      <ul>
+        <li>Index every <code>workspaceId</code>, every FK, every sortable column.</li>
+        <li>PgBouncer / Neon pooler in front of Postgres.</li>
+        <li>Redis cache for hot reads — workspace settings, feature flags, role permissions (TTL 60s).</li>
+        <li>API budget &lt; 200 ms p95.</li>
+        <li>Frontend: React Server Components for first paint; TanStack Query for client cache + optimistic updates.</li>
+        <li>Virtualized lists for &gt; 100 rows (<code>@tanstack/react-virtual</code>).</li>
+        <li>Code-split per product bundle.</li>
+        <li>BullMQ + Redis for anything &gt; 50 ms (email send, exports, scrape, reports).</li>
+        <li>Pino slow-query log + Sentry to catch lag before customer does.</li>
+        <li>Gzip/Brotli, HTTP/2, CDN in front (Cloudflare free) for static.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="stack">
+    <h2>11 · Tech stack</h2>
+    <div class="editable" contenteditable="false">
+      <table>
+        <thead><tr><th>Layer</th><th>Choice</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td>Frontend</td><td>Next.js 15 (App Router) + Tailwind + shadcn/ui</td><td>SSR + RSC + fast dev, modern look</td></tr>
+          <tr><td>Client state</td><td>TanStack Query + Zustand</td><td>Cache + optimistic UI</td></tr>
+          <tr><td>Offline</td><td>Workbox SW + Dexie (IndexedDB)</td><td>PWA, works without internet</td></tr>
+          <tr><td>Backend</td><td>NestJS 10 + TypeScript</td><td>Modular DI, future microservice split</td></tr>
+          <tr><td>ORM/DB</td><td>Prisma 5 + PostgreSQL 16</td><td>Type-safe, reliable, RLS support</td></tr>
+          <tr><td>Cache/Queue</td><td>Redis 7 + BullMQ</td><td>Hot cache + background jobs</td></tr>
+          <tr><td>Auth</td><td>JWT (access + refresh) + bcrypt + Passport</td><td>Stateless, scales horizontally</td></tr>
+          <tr><td>Scraper</td><td>Python 3.12 + Playwright</td><td>Best headless browser</td></tr>
+          <tr><td>Monorepo</td><td>pnpm + Turborepo</td><td>Single repo, shared types</td></tr>
+          <tr><td>Email</td><td>Resend (dev) / SMTP (BD provider) / Gmail OAuth</td><td>Cheap + customer-friendly</td></tr>
+          <tr><td>Monitoring</td><td>Sentry + Pino + UptimeRobot</td><td>Errors + structured logs + uptime</td></tr>
+          <tr><td>CI/CD</td><td>GitHub Actions → SSH deploy script</td><td>Free, simple, BD-VPS friendly</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="hosting">
+    <h2>12 · Hosting — BD-affordable + scalable</h2>
+    <div class="editable" contenteditable="false">
+      <h4>Stage 1 — Demo / pre-sales (free)</h4>
+      <table>
+        <thead><tr><th>Piece</th><th>Provider</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Frontend</td><td>Vercel Hobby</td><td>Free</td></tr>
+          <tr><td>API + scraper</td><td>Render free / Fly.io free</td><td>Free</td></tr>
+          <tr><td>Postgres</td><td>Neon (0.5 GB)</td><td>Free</td></tr>
+          <tr><td>Redis</td><td>Upstash (10k cmd/day)</td><td>Free</td></tr>
+          <tr><td>Storage</td><td>Cloudflare R2 (10 GB)</td><td>Free</td></tr>
+          <tr><td>Domain</td><td>Hostinger (you own)</td><td>Already paid</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Stage 2 — Selling to first 50 SMEs (Bangladesh VPS)</h4>
+      <p>Goal: keep monthly cost &lt; 3000 BDT until revenue covers it. Run everything on one VPS, scale vertically.</p>
+      <table>
+        <thead><tr><th>Provider (BD)</th><th>Plan</th><th>Approx price</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>ExonHost</td><td>Cloud VPS 2 vCPU / 4 GB / 80 GB SSD</td><td>~1,500–2,500 BDT/mo</td><td>Dhaka DC, bKash/Nagad accepted</td></tr>
+          <tr><td>IT Nut Hosting</td><td>VPS 2 vCPU / 4 GB</td><td>~1,500 BDT/mo</td><td>BD support, local invoice</td></tr>
+          <tr><td>XeonBD</td><td>VPS 4 GB</td><td>~2,000 BDT/mo</td><td>Local DC</td></tr>
+          <tr><td>Hostever</td><td>VPS 4 GB</td><td>~1,800 BDT/mo</td><td>Reseller-friendly</td></tr>
+          <tr><td>Dhaka Web Host</td><td>VPS</td><td>varies</td><td>Backup option</td></tr>
+          <tr><td>Hetzner (Germany)</td><td>CX22 / CPX21</td><td>~600–900 BDT/mo</td><td>Cheapest globally, ~120 ms ping from BD, accepts cards</td></tr>
+        </tbody>
+      </table>
+      <p>VPS layout — single 4 GB box:</p>
+<pre>
+docker compose:
+  postgres:16      → 1.5 GB ram, daily pg_dump → R2
+  redis:7-alpine   → 256 MB
+  api (NestJS)     → 800 MB
+  worker (BullMQ)  → 400 MB
+  scraper (python) → 600 MB (Playwright)
+  caddy / nginx    → TLS + reverse proxy
+
+frontend (Next.js) → Vercel free, points api.onspace.app at VPS
+</pre>
+
+      <h4>Stage 3 — Scale (when revenue justifies)</h4>
+      <ul>
+        <li>Split DB → managed Postgres (Neon Scale / DigitalOcean managed PG).</li>
+        <li>Move API to 2 VPS behind Caddy load-balancer.</li>
+        <li>Object storage → Cloudflare R2 / Backblaze B2 (cheap egress).</li>
+        <li>CDN → Cloudflare in front of everything.</li>
+        <li>Backups → daily pg_dump + WAL archive to R2 + weekly off-site.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section id="subs">
+    <h2>13 · Subscription — fully offline</h2>
+    <div class="editable" contenteditable="false">
+      <p>No Stripe, no online gateway. Sales close offline (in-person / phone / bKash). Admin enters the deal:</p>
+      <ul>
+        <li><b>Subscription</b> table — <code>planName</code>, <code>startsAt</code>, <code>expiresAt</code>, <code>status</code>, <code>amountPaid</code>, <code>notes</code>.</li>
+        <li>Daily cron flips expired subscriptions to <code>suspended</code>; blocks API and shows renewal banner.</li>
+        <li>Receipt PDF auto-generated and downloadable from admin panel.</li>
+        <li>Renewal reminders — system notifies us 14 / 7 / 1 days before expiry.</li>
+      </ul>
+      <p>Later we can flip on bKash / SSLCommerz when ready — same table, just add <code>gatewayTxId</code>.</p>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section id="sec">
+    <h2>14 · Security & compliance</h2>
+    <div class="editable" contenteditable="false">
+      <ul>
+        <li>Passwords: bcrypt cost 12 minimum.</li>
+        <li>JWT short access token (15 min) + refresh token rotation; revoke on logout.</li>
+        <li>Rate-limit auth + sensitive endpoints (nestjs-throttler + Redis).</li>
+        <li>Postgres RLS on every tenant table — defense in depth.</li>
+        <li>All writes go through audit log.</li>
+        <li>HTTPS only (Caddy auto-TLS via Let's Encrypt).</li>
+        <li>Daily encrypted pg_dump → off-site (R2).</li>
+        <li>Secrets in <code>.env</code> on server, never in repo; use SOPS later.</li>
+        <li>Impersonation only via admin panel, always audit-logged + banner shown to impersonated user.</li>
+        <li>Per-tenant data export endpoint (GDPR-style, useful for trust).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 15 -->
+  <section id="crm-migrate">
+    <h2>15 · OnspaceCRM → product module changes</h2>
+    <div class="editable" contenteditable="false">
+      <p>OnspaceCRM today is standalone. To slot under the Admin Panel as the <code>crm</code> product:</p>
+      <ol>
+        <li>Add platform-core Prisma models (User, Workspace, WorkspaceMember, Role, Product, Feature, WorkspaceProduct, WorkspaceFeature, Subscription, AuditLog).</li>
+        <li>Add <code>workspaceId String</code> to every existing CRM table; backfill current data into a single "internal" workspace.</li>
+        <li>Add composite indexes <code>(workspaceId, createdAt)</code> + workspaceId on every FK.</li>
+        <li>Add Auth module — register / login / refresh / logout, bcrypt + JWT.</li>
+        <li>Add Tenant guard middleware — extracts workspaceId from JWT, sets Postgres session var, attaches to <code>req</code>.</li>
+        <li>Add Prisma client extension auto-injecting <code>workspaceId</code> on all queries.</li>
+        <li>Migration: enable RLS + tenant-isolation policy on every CRM table.</li>
+        <li>Add Feature-flag service + <code>@RequireFeature('crm.email')</code> + <code>@RequirePermission('crm.lead.write')</code> decorators.</li>
+        <li>Register CRM as a <code>Product</code> seed + seed feature keys (<code>crm.lead</code>, <code>crm.group</code>, <code>crm.email</code>, <code>crm.scraper</code>, <code>crm.task</code>).</li>
+        <li>Wrap each CRM endpoint with the three-layer guard.</li>
+        <li>Frontend: read enabled products + features from <code>/me</code> response → render sidebar conditionally.</li>
+        <li>Hide CRM nav entirely if workspace has no <code>crm</code> product.</li>
+        <li>Add per-workspace settings page (branding, default currency, timezone).</li>
+        <li>Wire offline outbox + Dexie store for Lead, Note, Task tables.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 16 -->
+  <section id="roadmap">
+    <h2>16 · Build roadmap (solo + Claude Opus 4.7)</h2>
+    <div class="editable" contenteditable="false">
+      <table>
+        <thead><tr><th>Week</th><th>Deliverable</th><th>Done = </th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Platform-core schema + Auth + Login UI</td><td>Can register, login, get JWT</td></tr>
+          <tr><td>2</td><td>Tenant guard + RLS + backfill CRM tables</td><td>All CRM rows scoped to workspace</td></tr>
+          <tr><td>3</td><td>RBAC + permissions + role-based nav</td><td>Roles hide buttons/routes</td></tr>
+          <tr><td>4</td><td>Product/Feature flags + subscription guard</td><td>Toggling a feature flips UI off</td></tr>
+          <tr><td>5</td><td>Admin Panel — workspace CRUD + seats + sub dates + impersonate</td><td>We can onboard a workspace in &lt; 2 min</td></tr>
+          <tr><td>6</td><td>Audit log + performance pass (indexes, cache, virtualization)</td><td>p95 &lt; 200 ms on lead list</td></tr>
+          <tr><td>7</td><td>Offline outbox + Dexie + sync API for CRM</td><td>Drop wifi → still works → reconnect syncs</td></tr>
+          <tr><td>8</td><td>BD VPS deploy + Caddy + backups + monitoring</td><td>Live at api.onspace.app + admin.onspace.app</td></tr>
+          <tr><td>9–12</td><td>ERP module (inventory + orders) under same shell</td><td>Same workspace runs CRM + ERP</td></tr>
+          <tr><td>13–16</td><td>Accounting module + Restaurant POS</td><td>Two more products live</td></tr>
+          <tr><td>17–20</td><td>Super Shop POS + barcode + offline-priority polish</td><td>Fifth product live</td></tr>
+          <tr><td>21+</td><td>Sales push to SMEs, reference logos, testimonials</td><td>First paying workspace</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 17 -->
+  <section id="risks">
+    <h2>17 · Risks & mitigation</h2>
+    <div class="editable" contenteditable="false">
+      <table>
+        <thead><tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>One VPS dies</td><td>All customers down</td><td>Daily off-site backup + hot-spare VPS template + Caddy redirect</td></tr>
+          <tr><td>Tenant data leak</td><td>Catastrophic trust loss</td><td>Postgres RLS + Prisma middleware + integration tests per release</td></tr>
+          <tr><td>BD payment / sanctions cards</td><td>Can't pay Vercel/Stripe</td><td>Use BD providers + USD card via Payoneer / Wise</td></tr>
+          <tr><td>Burn-out (solo)</td><td>Project stalls</td><td>Aggressive Claude Opus 4.7 leverage, ship 1 module at a time</td></tr>
+          <tr><td>Customer expects free customization</td><td>Time sink</td><td>Productize features, charge for custom work separately</td></tr>
+          <tr><td>Offline sync conflicts</td><td>Data corruption</td><td>UUIDv7 IDs + version vectors + tombstones + manual resolve UI</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 18 -->
+  <section id="sales">
+    <h2>18 · Sales motion (offline pitch)</h2>
+    <div class="editable" contenteditable="false">
+      <ol>
+        <li>Build 2 polished products + 1 polished demo workspace.</li>
+        <li>Record 90-sec product videos in Bangla.</li>
+        <li>Walk into 20 target SMEs/week — restaurants, super shops, traders.</li>
+        <li>Demo on laptop, then show the same workspace working on their phone.</li>
+        <li>Close on the spot — yearly plan, bKash / bank transfer.</li>
+        <li>We provision workspace from Admin Panel in &lt; 5 min.</li>
+        <li>1-hour on-site training; leave a printed quick-start.</li>
+        <li>30-day follow-up call → upsell next module.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 19 -->
+  <section id="future">
+    <h2>19 · Future expansion</h2>
+    <div class="editable" contenteditable="false">
+      <ul>
+        <li>Module marketplace — third-party devs publish modules under our shell, rev-share.</li>
+        <li>White-label — partner agencies resell under their brand.</li>
+        <li>Bangla-first AI assistant inside each product (Claude API).</li>
+        <li>Mobile-native shell (Capacitor wrapping the PWA) for App Store.</li>
+        <li>bKash / SSLCommerz auto-renew when offline-sales saturates.</li>
+        <li>Regional expansion — Nepal, Sri Lanka, Pakistan after BD product-market fit.</li>
+      </ul>
+    </div>
+  </section>
+
+  <p style="color:var(--muted); font-size:12px; margin-top:30px;">
+    Last edited: <span id="last-edit">never</span> · Storage: <code>localStorage["onspace-vision-v1"]</code> · Press <span class="kbd">E</span> to toggle edit, <span class="kbd">S</span> to save.
+  </p>
+
+</main>
+
+<div class="toast" id="toast">Saved.</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = "onspace-vision-v1";
+  const editables = () => document.querySelectorAll(".editable");
+  const toast = (msg) => {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>t.classList.remove("show"), 1400);
+  };
+
+  // ---- Edit toggle
+  let editing = false;
+  function setEdit(on) {
+    editing = on;
+    document.body.classList.toggle("edit-on", on);
+    editables().forEach(el => el.setAttribute("contenteditable", on ? "true" : "false"));
+    document.getElementById("btn-edit").textContent = on ? "Editing… (toggle)" : "Toggle edit";
+  }
+
+  // ---- Save / load
+  function save() {
+    const data = {};
+    editables().forEach((el, i) => { data["el_" + i] = el.innerHTML; });
+    data.__savedAt = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    document.getElementById("last-edit").textContent = new Date().toLocaleString();
+    toast("Saved locally.");
+  }
+  function load() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      editables().forEach((el, i) => {
+        if (data["el_" + i] != null) el.innerHTML = data["el_" + i];
+      });
+      if (data.__savedAt) document.getElementById("last-edit").textContent = new Date(data.__savedAt).toLocaleString();
+    } catch(e) { console.warn("Restore failed", e); }
+  }
+
+  // ---- Export: serialize the full document as standalone HTML
+  function exportHtml() {
+    // Make sure latest edits are reflected in DOM
+    const clone = document.documentElement.cloneNode(true);
+    // Strip toast state
+    const t = clone.querySelector("#toast"); if (t) t.classList.remove("show");
+    // Drop the edit-on class so the export looks clean
+    clone.querySelector("body")?.classList.remove("edit-on");
+    const blob = new Blob(["<!doctype html>\n" + clone.outerHTML], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "onspace-vision.html";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Exported HTML.");
+  }
+
+  function resetAll() {
+    if (!confirm("Reset all sections to default content? Your local edits will be lost.")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+
+  // ---- TOC active state
+  const tocLinks = document.querySelectorAll('#toc a');
+  const sections = Array.from(document.querySelectorAll('main section'));
+  function onScroll() {
+    const y = window.scrollY + 120;
+    let current = sections[0]?.id;
+    for (const s of sections) { if (s.offsetTop <= y) current = s.id; }
+    tocLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+
+  // ---- Shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target.isContentEditable) return;
+    if (e.key === 'e' || e.key === 'E') { setEdit(!editing); }
+    if (e.key === 's' || e.key === 'S') { save(); }
+  });
+
+  // ---- Wire buttons
+  document.getElementById('btn-edit').addEventListener('click', () => setEdit(!editing));
+  document.getElementById('btn-save').addEventListener('click', save);
+  document.getElementById('btn-export').addEventListener('click', exportHtml);
+  document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+  load();
+  onScroll();
+})();
+</script>
+</body>
+</html>

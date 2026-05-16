@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './modules/health/health.controller';
+import { AuthModule } from './modules/auth/auth.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { ScrapeModule } from './modules/scrape/scrape.module';
 import { SearchesModule } from './modules/searches/searches.module';
@@ -36,6 +36,7 @@ import { SequencesModule } from './modules/sequences/sequences.module';
       },
     }),
     PrismaModule,
+    AuthModule,
     LeadsModule,
     SearchesModule,
     ScrapeModule,

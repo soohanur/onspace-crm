@@ -4,6 +4,7 @@ import { Shell } from '@/components/Shell';
 import { QueryProvider } from '@/components/QueryProvider';
 import { SidebarProvider } from '@/components/SidebarContext';
 import { ThemeMount } from '@/components/ThemeMount';
+import { AuthProvider } from '@/components/AuthContext';
 
 export const metadata: Metadata = {
   title: 'OnspaceCRM',
@@ -37,9 +38,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         <ThemeMount />
         <QueryProvider>
-          <SidebarProvider>
-            <Shell>{children}</Shell>
-          </SidebarProvider>
+          <AuthProvider>
+            <SidebarProvider>
+              <Shell>{children}</Shell>
+            </SidebarProvider>
+          </AuthProvider>
         </QueryProvider>
       </body>
     </html>

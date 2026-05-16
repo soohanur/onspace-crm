@@ -179,7 +179,7 @@ model ScrapeJob {
   totalSaved     Int             @default(0) @map("total_saved")
   error          String?
   startedAt      DateTime?       @map("started_at")
-  finishedAt    DateTime?       @map("finished_at")
+  finishedAt     DateTime?       @map("finished_at")
   createdAt      DateTime        @default(now()) @map("created_at")
 
   leads Lead[]
@@ -190,67 +190,67 @@ model ScrapeJob {
 }
 
 model Lead {
-  id             String   @id @default(uuid())
-  jobId          String?  @map("job_id")
+  id    String  @id @default(uuid())
+  jobId String? @map("job_id")
 
   // Source provenance
-  source         String   @default("yellowpages")
-  sourceUrl      String?  @map("source_url")
-  externalId     String?  @map("external_id")
+  source     String  @default("yellowpages")
+  sourceUrl  String? @map("source_url")
+  externalId String? @map("external_id")
 
   // Search context (denormalized for fast filtering / autocomplete)
-  searchQuery    String   @map("search_query")
-  searchLocation String   @map("search_location")
+  searchQuery    String @map("search_query")
+  searchLocation String @map("search_location")
 
   // Core business fields
-  businessName   String   @map("business_name")
-  category       String?           // primary category
-  categories     String[]          @default([])  // all categories listed
-  phone          String?
-  phones         String[]          @default([])  // additional phones
-  fax            String?
-  email          String?
-  emails         String[]          @default([])  // all harvested emails
-  website        String?
+  businessName String   @map("business_name")
+  category     String? // primary category
+  categories   String[] @default([]) // all categories listed
+  phone        String?
+  phones       String[] @default([]) // additional phones
+  fax          String?
+  email        String?
+  emails       String[] @default([]) // all harvested emails
+  website      String?
 
   // Address
-  address        String?
-  address2       String?
-  city           String?
-  state          String?
-  postalCode     String?  @map("postal_code")
-  country        String?  @default("US")
-  latitude       Float?
-  longitude      Float?
+  address    String?
+  address2   String?
+  city       String?
+  state      String?
+  postalCode String? @map("postal_code")
+  country    String? @default("US")
+  latitude   Float?
+  longitude  Float?
 
   // Business profile (slim — kept only what we use in CRM lead lists)
-  description    String?  @db.Text   // "General Info" paragraph from YP
-  businessHistory String? @db.Text  @map("business_history")
-  yearEstablished Int?    @map("year_established")
-  neighborhoods  String[] @default([])
-  rating         Float?
-  reviewCount    Int?     @map("review_count")
-  bbbGrade       String?  @map("bbb_grade")
-  yearsInBusiness Int?    @map("years_in_business")
-  yearsWithYP    Int?     @map("years_with_yp")
-  claimed        Boolean  @default(false)
-  photos         String[] @default([])
-  logoUrl        String?  @map("logo_url")
-  bannerUrl      String?  @map("banner_url")
-  otherLinks     String[] @default([]) @map("other_links")  // additional websites
+  description     String?  @db.Text // "General Info" paragraph from YP
+  businessHistory String?  @map("business_history") @db.Text
+  yearEstablished Int?     @map("year_established")
+  neighborhoods   String[] @default([])
+  rating          Float?
+  reviewCount     Int?     @map("review_count")
+  bbbGrade        String?  @map("bbb_grade")
+  yearsInBusiness Int?     @map("years_in_business")
+  yearsWithYP     Int?     @map("years_with_yp")
+  claimed         Boolean  @default(false)
+  photos          String[] @default([])
+  logoUrl         String?  @map("logo_url")
+  bannerUrl       String?  @map("banner_url")
+  otherLinks      String[] @default([]) @map("other_links") // additional websites
 
   // All unique social URLs found across YP listing + business website.
   // Frontend classifies platform from the URL host at render time.
-  socials        String[] @default([])
+  socials String[] @default([])
 
   // Owner enrichment (best-effort) — legacy; the scraper still writes here
   // and the lead detail still surfaces it. Phase 5 introduces the
   // structured `contacts` table; these stay until every reader migrates.
-  ownerName      String?  @map("owner_name")
-  ownerEmail     String?  @map("owner_email")
-  ownerPhone     String?  @map("owner_phone")
-  ownerLinkedin  String?  @map("owner_linkedin")
-  ownerSearchUrl String?  @map("owner_search_url")  // pre-built Google query for owner discovery
+  ownerName      String? @map("owner_name")
+  ownerEmail     String? @map("owner_email")
+  ownerPhone     String? @map("owner_phone")
+  ownerLinkedin  String? @map("owner_linkedin")
+  ownerSearchUrl String? @map("owner_search_url") // pre-built Google query for owner discovery
 
   // Phase 5 — pipeline state. Defaults make every existing row a sensible
   // "new / valid / score=0" record without backfill.
@@ -262,29 +262,29 @@ model Lead {
   // Phase 7 — last time `stage` actually changed. Used by automation rules
   // that need "X has been in stage Y for N days" precision; lead.updatedAt
   // is too noisy because it bumps on every column write.
-  stageChangedAt DateTime?      @map("stage_changed_at")
+  stageChangedAt DateTime? @map("stage_changed_at")
 
   // Dedup hash: sha1(lower(business_name) + normalize(phone) + normalize(address))
-  dedupHash      String?  @map("dedup_hash")
+  dedupHash String? @map("dedup_hash")
 
   // Original parsed payload for debugging / re-processing
-  rawPayload     Json?    @map("raw_payload")
+  rawPayload Json? @map("raw_payload")
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  job              ScrapeJob?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  groupMemberships LeadGroupMember[]
-  notes            Note[]
-  emailLogs        EmailLog[]
-  contacts         Contact[]
-  tasks            Task[]
-  meetings         Meeting[]
-  proposals        Proposal[]
-  calls            Call[]
-  campaignRecipients CampaignRecipient[]
+  job                 ScrapeJob?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  groupMemberships    LeadGroupMember[]
+  notes               Note[]
+  emailLogs           EmailLog[]
+  contacts            Contact[]
+  tasks               Task[]
+  meetings            Meeting[]
+  proposals           Proposal[]
+  calls               Call[]
+  campaignRecipients  CampaignRecipient[]
   sequenceEnrollments SequenceEnrollment[]
-  stageHistory     LeadStageHistory[]
+  stageHistory        LeadStageHistory[]
 
   @@unique([source, dedupHash])
   @@index([searchQuery, searchLocation])
@@ -309,7 +309,7 @@ model Contact {
   id            String        @id @default(uuid())
   leadId        String        @map("lead_id")
   name          String
-  contactType   ContactType   @default(general)    @map("contact_type")
+  contactType   ContactType   @default(general) @map("contact_type")
   email         String?
   phone         String?
   linkedin      String?
@@ -317,17 +317,17 @@ model Contact {
   source        ContactSource @default(manual)
   confidence    Confidence    @default(low)
   status        ContactStatus @default(unverified)
-  isPrimary     Boolean       @default(false)      @map("is_primary")
+  isPrimary     Boolean       @default(false) @map("is_primary")
   notes         String?       @db.Text
-  createdAt     DateTime      @default(now())      @map("created_at")
-  updatedAt     DateTime      @updatedAt           @map("updated_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  tasks Task[]
-  meetings Meeting[]
-  proposals Proposal[]
-  calls Call[]
-  campaignRecipients CampaignRecipient[]
+  lead                Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tasks               Task[]
+  meetings            Meeting[]
+  proposals           Proposal[]
+  calls               Call[]
+  campaignRecipients  CampaignRecipient[]
   sequenceEnrollments SequenceEnrollment[]
 
   @@index([leadId])
@@ -352,18 +352,26 @@ model Task {
   completedAt     DateTime?    @map("completed_at")
   /// Stage the lead was in when this task was created — useful for context filters.
   stageAtCreation LeadStage    @map("stage_at_creation")
-  /// Free-form attribution string until multi-tenant arrives. Phase 7 swaps this for a user FK.
+  /// Legacy free-form attribution. Kept for backfill; new writes should use assigneeId.
   assignedTo      String?      @map("assigned_to")
+  /// FK to WorkspaceMember — the employee this task belongs to.
+  assigneeId      String?      @map("assignee_id")
+  /// FK to WorkspaceMember — who created the task.
+  createdById     String?      @map("created_by_id")
   createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt      @map("updated_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
-  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead      Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact   Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignee  WorkspaceMember? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy WorkspaceMember? @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([leadId])
   @@index([status, dueAt])
   @@index([dueAt])
   @@index([kind, context])
+  @@index([assigneeId, status])
+  @@index([assigneeId, dueAt])
   @@map("tasks")
 }
 
@@ -372,10 +380,10 @@ model LeadGroup {
   name        String
   description String?
   type        GroupType
-  filterDsl   Json?     @map("filter_dsl")  // for smart groups: same shape as /leads query params
+  filterDsl   Json?     @map("filter_dsl") // for smart groups: same shape as /leads query params
   color       String?
   createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt      @map("updated_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   members   LeadGroupMember[]
   campaigns Campaign[]
@@ -392,7 +400,7 @@ model LeadGroupMember {
   addedAt DateTime @default(now()) @map("added_at")
 
   group LeadGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  lead  Lead      @relation(fields: [leadId],  references: [id], onDelete: Cascade)
+  lead  Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@id([groupId, leadId])
   @@index([leadId])
@@ -403,7 +411,7 @@ model Note {
   id        String   @id @default(uuid())
   leadId    String   @map("lead_id")
   body      String   @db.Text
-  authorId  String?  @map("author_id")           // hooks into users table later
+  authorId  String?  @map("author_id") // hooks into users table later
   createdAt DateTime @default(now()) @map("created_at")
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -422,14 +430,14 @@ model EmailAccount {
   id           String   @id @default(uuid())
   email        String   @unique
   displayName  String?  @map("display_name")
-  provider     String   @default("gmail")     // gmail|outlook|smtp
-  accessToken  String   @db.Text @map("access_token")
-  refreshToken String   @db.Text @map("refresh_token")
+  provider     String   @default("gmail") // gmail|outlook|smtp
+  accessToken  String   @map("access_token") @db.Text
+  refreshToken String   @map("refresh_token") @db.Text
   expiresAt    DateTime @map("expires_at")
   scopes       String[] @default([])
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt      @map("updated_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   emailLogs EmailLog[]
   campaigns Campaign[]
@@ -446,31 +454,31 @@ model EmailAccount {
 // listeners we'll add in Phase 4.
 
 model EmailLog {
-  id        String      @id @default(uuid())
-  leadId    String      @map("lead_id")
-  accountId String?     @map("account_id")
+  id        String  @id @default(uuid())
+  leadId    String  @map("lead_id")
+  accountId String? @map("account_id")
 
-  fromEmail String      @map("from_email")
-  fromName  String?     @map("from_name")
-  toEmail   String      @map("to_email")
-  cc        String[]    @default([])
-  bcc       String[]    @default([])
+  fromEmail String   @map("from_email")
+  fromName  String?  @map("from_name")
+  toEmail   String   @map("to_email")
+  cc        String[] @default([])
+  bcc       String[] @default([])
   subject   String
-  bodyHtml  String?     @db.Text @map("body_html")
-  bodyText  String?     @db.Text @map("body_text")
+  bodyHtml  String?  @map("body_html") @db.Text
+  bodyText  String?  @map("body_text") @db.Text
 
-  status      EmailStatus @default(queued)
-  provider    String      @default("gmail")
-  messageId   String?     @map("message_id")    // Gmail message id (Message-ID header)
-  threadId    String?     @map("thread_id")     // Gmail threadId — for reply detection
+  status    EmailStatus @default(queued)
+  provider  String      @default("gmail")
+  messageId String?     @map("message_id") // Gmail message id (Message-ID header)
+  threadId  String?     @map("thread_id") // Gmail threadId — for reply detection
 
   // [{filename, mimeType, size, storagePath}, ...]
-  attachments Json        @default("[]")
+  attachments Json @default("[]")
 
   // Tracking key embedded in pixel + click links. Unique so we can look up by it.
-  trackingId String     @unique @default(uuid()) @map("tracking_id")
+  trackingId String @unique @default(uuid()) @map("tracking_id")
 
-  error     String?     @db.Text
+  error String? @db.Text
 
   // Phase 4 hooks (nullable for now)
   openedAt       DateTime? @map("opened_at")
@@ -488,12 +496,12 @@ model EmailLog {
   sentAt    DateTime? @map("sent_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  lead     Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  account  EmailAccount?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  campaign Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  replies  EmailReply[]
-  campaignRecipient CampaignRecipient?
-  proposal Proposal?         @relation("ProposalEmailLog")
+  lead                   Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  account                EmailAccount?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  campaign               Campaign?               @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  replies                EmailReply[]
+  campaignRecipient      CampaignRecipient?
+  proposal               Proposal?               @relation("ProposalEmailLog")
   sequenceEnrollmentSend SequenceEnrollmentSend? @relation("SequenceEnrollmentSendEmailLog")
 
   @@index([leadId, createdAt])
@@ -507,15 +515,15 @@ model EmailLog {
 /// email (Gmail's image proxy, the recipient's actual browser, etc.) and
 /// defend against pre-fetch false positives.
 model EmailPixelHit {
-  id          String   @id @default(uuid())
-  emailLogId  String   @map("email_log_id")
-  trackingId  String   @map("tracking_id")
-  userAgent   String?  @map("user_agent")
-  ipAddress   String?  @map("ip_address")
+  id                String   @id @default(uuid())
+  emailLogId        String   @map("email_log_id")
+  trackingId        String   @map("tracking_id")
+  userAgent         String?  @map("user_agent")
+  ipAddress         String?  @map("ip_address")
   /// Set true if this hit landed within the prefetch window (likely Gmail
   /// proxy pre-fetching on delivery, not a real open).
   suspectedPrefetch Boolean  @default(false) @map("suspected_prefetch")
-  hitAt       DateTime @default(now()) @map("hit_at")
+  hitAt             DateTime @default(now()) @map("hit_at")
 
   @@index([emailLogId, hitAt])
   @@index([trackingId])
@@ -526,22 +534,22 @@ model EmailPixelHit {
 /// The first time we see a new message in a thread we own, we insert a row
 /// here and bump email_logs.repliedAt.
 model EmailReply {
-  id              String   @id @default(uuid())
-  emailLogId      String   @map("email_log_id")
-  leadId          String   @map("lead_id")
+  id         String @id @default(uuid())
+  emailLogId String @map("email_log_id")
+  leadId     String @map("lead_id")
 
-  gmailMessageId  String   @unique @map("gmail_message_id")
-  threadId        String   @map("thread_id")
-  fromEmail       String   @map("from_email")
-  fromName        String?  @map("from_name")
-  toEmail         String?  @map("to_email")
-  subject         String?
-  snippet         String?  @db.Text             // short preview from Gmail
-  bodyText        String?  @db.Text @map("body_text")
-  bodyHtml        String?  @db.Text @map("body_html")
+  gmailMessageId String  @unique @map("gmail_message_id")
+  threadId       String  @map("thread_id")
+  fromEmail      String  @map("from_email")
+  fromName       String? @map("from_name")
+  toEmail        String? @map("to_email")
+  subject        String?
+  snippet        String? @db.Text // short preview from Gmail
+  bodyText       String? @map("body_text") @db.Text
+  bodyHtml       String? @map("body_html") @db.Text
 
-  receivedAt      DateTime @map("received_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  receivedAt DateTime @map("received_at")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   emailLog EmailLog @relation(fields: [emailLogId], references: [id], onDelete: Cascade)
 
@@ -576,13 +584,13 @@ model EmailTemplate {
   name        String
   description String?
   subject     String
-  bodyText    String   @db.Text @map("body_text")
+  bodyText    String   @map("body_text") @db.Text
   /// Optional. If null we render bodyText as HTML at send time.
-  bodyHtml    String?  @db.Text @map("body_html")
+  bodyHtml    String?  @map("body_html") @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  campaigns Campaign[]
+  campaigns     Campaign[]
   sequenceSteps SequenceStep[]
 
   @@index([createdAt])
@@ -590,27 +598,27 @@ model EmailTemplate {
 }
 
 model Campaign {
-  id              String         @id @default(uuid())
-  name            String
-  description     String?
-  status          CampaignStatus @default(draft)
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  status      CampaignStatus @default(draft)
 
-  groupId         String         @map("group_id")
-  templateId      String         @map("template_id")
-  accountId       String         @map("account_id")
+  groupId    String @map("group_id")
+  templateId String @map("template_id")
+  accountId  String @map("account_id")
 
   /// Frozen subject + bodies copied from the template at start time.
   /// Editing the template after a campaign starts MUST NOT retroactively
   /// change what recipients see.
-  frozenSubject  String?  @map("frozen_subject")
-  frozenBodyText String?  @db.Text @map("frozen_body_text")
-  frozenBodyHtml String?  @db.Text @map("frozen_body_html")
+  frozenSubject  String? @map("frozen_subject")
+  frozenBodyText String? @map("frozen_body_text") @db.Text
+  frozenBodyHtml String? @map("frozen_body_html") @db.Text
 
   /// Per-account daily cap honored at queue-pick time. Default 250
   /// (half of Gmail free-tier 500/day).
   dailySendLimit  Int @default(250) @map("daily_send_limit")
   /// Inter-send delay in seconds. Default 12 (~5/min, gentle on Gmail).
-  sendIntervalSec Int @default(12)  @map("send_interval_sec")
+  sendIntervalSec Int @default(12) @map("send_interval_sec")
 
   recipientCount Int @default(0) @map("recipient_count")
   sentCount      Int @default(0) @map("sent_count")
@@ -620,11 +628,11 @@ model Campaign {
   startedAt  DateTime? @map("started_at")
   finishedAt DateTime? @map("finished_at")
   createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt      @map("updated_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  group      LeadGroup           @relation(fields: [groupId],    references: [id], onDelete: Restrict)
+  group      LeadGroup           @relation(fields: [groupId], references: [id], onDelete: Restrict)
   template   EmailTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  account    EmailAccount        @relation(fields: [accountId],  references: [id], onDelete: Restrict)
+  account    EmailAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
   recipients CampaignRecipient[]
   emailLogs  EmailLog[]
 
@@ -634,27 +642,27 @@ model Campaign {
 }
 
 model CampaignRecipient {
-  id         String                  @id @default(uuid())
-  campaignId String                  @map("campaign_id")
-  leadId     String                  @map("lead_id")
-  contactId  String?                 @map("contact_id")
-  toEmail    String                  @map("to_email")
+  id         String  @id @default(uuid())
+  campaignId String  @map("campaign_id")
+  leadId     String  @map("lead_id")
+  contactId  String? @map("contact_id")
+  toEmail    String  @map("to_email")
 
-  renderedSubject  String?  @map("rendered_subject")
-  renderedBodyText String?  @db.Text @map("rendered_body_text")
-  renderedBodyHtml String?  @db.Text @map("rendered_body_html")
+  renderedSubject  String? @map("rendered_subject")
+  renderedBodyText String? @map("rendered_body_text") @db.Text
+  renderedBodyHtml String? @map("rendered_body_html") @db.Text
 
   status      CampaignRecipientStatus @default(pending)
   emailLogId  String?                 @unique @map("email_log_id")
   error       String?                 @db.Text
   attemptedAt DateTime?               @map("attempted_at")
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  lead     Lead      @relation(fields: [leadId],     references: [id], onDelete: Cascade)
-  contact  Contact?  @relation(fields: [contactId],  references: [id], onDelete: SetNull)
+  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact  Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   emailLog EmailLog? @relation(fields: [emailLogId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, leadId])
@@ -669,42 +677,42 @@ model CampaignRecipient {
 /// dispatch invites — failures land in `syncError` but never fail the
 /// local DB write.
 model Meeting {
-  id           String        @id @default(uuid())
-  leadId       String        @map("lead_id")
-  contactId    String?       @map("contact_id")
+  id          String        @id @default(uuid())
+  leadId      String        @map("lead_id")
+  contactId   String?       @map("contact_id")
   /// EmailAccount used to create the GCal event. Null if no calendar sync.
-  accountId    String?       @map("account_id")
-  title        String
-  type         MeetingType   @default(phone)
+  accountId   String?       @map("account_id")
+  title       String
+  type        MeetingType   @default(phone)
   /// Optional URL for zoom/meet/etc. Free-form for in_person ("Office, 2nd floor").
-  meetingLink  String?       @map("meeting_link")
-  scheduledAt  DateTime      @map("scheduled_at")
+  meetingLink String?       @map("meeting_link")
+  scheduledAt DateTime      @map("scheduled_at")
   /// Duration in minutes. Default 30. Server stores; UI offers presets.
-  durationMin  Int           @default(30) @map("duration_min")
-  status       MeetingStatus @default(scheduled)
-  notes        String?       @db.Text
+  durationMin Int           @default(30) @map("duration_min")
+  status      MeetingStatus @default(scheduled)
+  notes       String?       @db.Text
   /// Free-form follow-up intention captured at meeting completion ("Send proposal", "Loop in finance").
-  nextAction   String?       @map("next_action")
+  nextAction  String?       @map("next_action")
   /// Free-form attribution string until multi-tenant arrives. Phase 7+ swaps for a user FK.
-  assignedTo   String?       @map("assigned_to")
+  assignedTo  String?       @map("assigned_to")
 
   /// Email addresses of intended attendees. Defaults to primary contact
   /// email or lead.email at create time. Pass-through to GCal.
-  attendeeEmails    String[]   @default([]) @map("attendee_emails")
+  attendeeEmails String[] @default([]) @map("attendee_emails")
 
   /// Google Calendar sync state. externalEventId is the GCal event id;
   /// externalLink is the htmlLink GCal returns; lastSyncedAt + syncError
   /// expose the most recent attempt to the UI.
-  externalProvider  String?    @map("external_provider")
-  externalEventId   String?    @map("external_event_id")
-  externalLink      String?    @map("external_link")
-  lastSyncedAt      DateTime?  @map("last_synced_at")
-  syncError         String?    @db.Text @map("sync_error")
+  externalProvider String?   @map("external_provider")
+  externalEventId  String?   @map("external_event_id")
+  externalLink     String?   @map("external_link")
+  lastSyncedAt     DateTime? @map("last_synced_at")
+  syncError        String?   @map("sync_error") @db.Text
 
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt      @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  lead    Lead          @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  lead    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   contact Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   account EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
@@ -720,30 +728,30 @@ model Meeting {
 /// outbound message naturally; deleting the proposal does NOT delete the
 /// EmailLog (audit trail stays).
 model Proposal {
-  id            String         @id @default(uuid())
-  leadId        String         @map("lead_id")
-  contactId     String?        @map("contact_id")
-  accountId     String?        @map("account_id")
+  id          String         @id @default(uuid())
+  leadId      String         @map("lead_id")
+  contactId   String?        @map("contact_id")
+  accountId   String?        @map("account_id")
   /// Email subject line.
-  subject       String
+  subject     String
   /// Email body (text). HTML is rendered server-side from the text at send
   /// time using the same plainToHtml helper EmailService uses.
-  message       String         @db.Text
+  message     String         @db.Text
   /// Recipient email at the moment of send (snapshotted — primary contact's
   /// email or lead.email at that time).
-  toEmail       String         @map("to_email")
+  toEmail     String         @map("to_email")
   /// Files attached to the proposal email. Same JSON shape as
   /// email_logs.attachments — [{filename,mimeType,size,storagePath}, ...]
-  attachments   Json           @default("[]")
-  status        ProposalStatus @default(draft)
+  attachments Json           @default("[]")
+  status      ProposalStatus @default(draft)
   /// Linked outbound EmailLog when status='sent'. Unique back-relation.
-  emailLogId    String?        @unique @map("email_log_id")
-  error         String?        @db.Text
-  sentAt        DateTime?      @map("sent_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt      @map("updated_at")
+  emailLogId  String?        @unique @map("email_log_id")
+  error       String?        @db.Text
+  sentAt      DateTime?      @map("sent_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  lead     Lead          @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  lead     Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   contact  Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   account  EmailAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   emailLog EmailLog?     @relation("ProposalEmailLog", fields: [emailLogId], references: [id], onDelete: SetNull)
@@ -758,31 +766,31 @@ model Proposal {
 /// completed → drives stage automation; scheduled → defers it until the
 /// user marks completed.
 model Call {
-  id             String         @id @default(uuid())
-  leadId         String         @map("lead_id")
-  contactId      String?        @map("contact_id")
+  id            String        @id @default(uuid())
+  leadId        String        @map("lead_id")
+  contactId     String?       @map("contact_id")
   /// Free-form attribution until multi-tenant arrives.
-  assignedTo     String?        @map("assigned_to")
-  direction      CallDirection
+  assignedTo    String?       @map("assigned_to")
+  direction     CallDirection
   /// Outbound: toPhone is the lead. Inbound: fromPhone is the lead.
-  toPhone        String?        @map("to_phone")
-  fromPhone      String?        @map("from_phone")
+  toPhone       String?       @map("to_phone")
+  fromPhone     String?       @map("from_phone")
   /// When the call happened (status='completed') OR is scheduled for
   /// (status='scheduled'). Same column drives both buckets.
-  occurredAt     DateTime       @map("occurred_at")
-  durationSec    Int?           @map("duration_sec")
-  outcome        CallOutcome?
-  status         CallStatus     @default(completed)
-  notes          String?        @db.Text
-  voicemailLeft  Boolean        @default(false) @map("voicemail_left")
+  occurredAt    DateTime      @map("occurred_at")
+  durationSec   Int?          @map("duration_sec")
+  outcome       CallOutcome?
+  status        CallStatus    @default(completed)
+  notes         String?       @db.Text
+  voicemailLeft Boolean       @default(false) @map("voicemail_left")
   /// Captured action item from the call ("send proposal", "schedule demo").
-  nextAction     String?        @map("next_action")
+  nextAction    String?       @map("next_action")
   /// Soft-delete: non-null = in trash. Hard delete only on explicit purge.
-  deletedAt      DateTime?      @map("deleted_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt      @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  lead    Lead     @relation(fields: [leadId],    references: [id], onDelete: Cascade)
+  lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([leadId])
@@ -813,17 +821,17 @@ enum NotificationStatus {
 /// already enforces its own constraints, and a notification surviving
 /// past its target is just stale UI, not corrupt state.
 model Notification {
-  id          String              @id @default(uuid())
-  kind        NotificationKind
-  status      NotificationStatus  @default(unread)
-  title       String
-  message     String?             @db.Text
-  entityType  String?             @map("entity_type")
-  entityId    String?             @map("entity_id")
+  id         String             @id @default(uuid())
+  kind       NotificationKind
+  status     NotificationStatus @default(unread)
+  title      String
+  message    String?            @db.Text
+  entityType String?            @map("entity_type")
+  entityId   String?            @map("entity_id")
   /// Free-form attribution until multi-tenant arrives. null = workspace-wide.
-  assignedTo  String?             @map("assigned_to")
-  createdAt   DateTime            @default(now()) @map("created_at")
-  readAt      DateTime?           @map("read_at")
+  assignedTo String?            @map("assigned_to")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  readAt     DateTime?          @map("read_at")
 
   @@index([status, createdAt])
   @@index([entityType, entityId])
@@ -862,16 +870,16 @@ model Sequence {
   dailySendLimit  Int            @default(250) @map("daily_send_limit")
   sendIntervalSec Int            @default(12) @map("send_interval_sec")
 
-  enrolledCount   Int            @default(0) @map("enrolled_count")
-  completedCount  Int            @default(0) @map("completed_count")
-  exitedCount     Int            @default(0) @map("exited_count")
+  enrolledCount  Int @default(0) @map("enrolled_count")
+  completedCount Int @default(0) @map("completed_count")
+  exitedCount    Int @default(0) @map("exited_count")
 
-  startedAt       DateTime?      @map("started_at")
-  archivedAt      DateTime?      @map("archived_at")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt      @map("updated_at")
+  startedAt  DateTime? @map("started_at")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  group       LeadGroup?           @relation(fields: [groupId],   references: [id], onDelete: SetNull)
+  group       LeadGroup?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
   account     EmailAccount         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   steps       SequenceStep[]
   enrollments SequenceEnrollment[]
@@ -882,16 +890,16 @@ model Sequence {
 }
 
 model SequenceStep {
-  id                     String        @id @default(uuid())
-  sequenceId             String        @map("sequence_id")
+  id                     String   @id @default(uuid())
+  sequenceId             String   @map("sequence_id")
   /// 0-indexed. Step 0 fires immediately on enrollment (delayDays ignored).
   order                  Int
   /// Wait this many days after the previous step. Ignored for step 0.
-  delayDays              Int           @default(0) @map("delay_days")
-  templateId             String        @map("template_id")
-  stopOnReply            Boolean       @default(true) @map("stop_on_reply")
-  stopOnStageProgression Boolean       @default(true) @map("stop_on_stage_progression")
-  createdAt              DateTime      @default(now()) @map("created_at")
+  delayDays              Int      @default(0) @map("delay_days")
+  templateId             String   @map("template_id")
+  stopOnReply            Boolean  @default(true) @map("stop_on_reply")
+  stopOnStageProgression Boolean  @default(true) @map("stop_on_stage_progression")
+  createdAt              DateTime @default(now()) @map("created_at")
 
   sequence Sequence      @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   template EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
@@ -915,13 +923,13 @@ model SequenceEnrollment {
   nextSendAt    DateTime         @map("next_send_at")
   enrolledAt    DateTime         @default(now()) @map("enrolled_at")
   exitedAt      DateTime?        @map("exited_at")
-  exitReason    String?          @db.Text @map("exit_reason")
+  exitReason    String?          @map("exit_reason") @db.Text
   createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt      @map("updated_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
 
-  sequence Sequence                @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  lead     Lead                    @relation(fields: [leadId],     references: [id], onDelete: Cascade)
-  contact  Contact?                @relation(fields: [contactId],  references: [id], onDelete: SetNull)
+  sequence Sequence                 @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  lead     Lead                     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact  Contact?                 @relation(fields: [contactId], references: [id], onDelete: SetNull)
   sends    SequenceEnrollmentSend[]
 
   @@unique([sequenceId, leadId])
@@ -930,15 +938,15 @@ model SequenceEnrollment {
 }
 
 model SequenceEnrollmentSend {
-  id               String             @id @default(uuid())
-  enrollmentId     String             @map("enrollment_id")
-  stepOrder        Int                @map("step_order")
+  id               String   @id @default(uuid())
+  enrollmentId     String   @map("enrollment_id")
+  stepOrder        Int      @map("step_order")
   /// Frozen renders so template edits don't retroactively rewrite history.
-  renderedSubject  String             @map("rendered_subject")
-  renderedBodyText String             @db.Text @map("rendered_body_text")
-  renderedBodyHtml String?            @db.Text @map("rendered_body_html")
-  emailLogId       String?            @unique @map("email_log_id")
-  sentAt           DateTime           @default(now()) @map("sent_at")
+  renderedSubject  String   @map("rendered_subject")
+  renderedBodyText String   @map("rendered_body_text") @db.Text
+  renderedBodyHtml String?  @map("rendered_body_html") @db.Text
+  emailLogId       String?  @unique @map("email_log_id")
+  sentAt           DateTime @default(now()) @map("sent_at")
 
   enrollment SequenceEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   emailLog   EmailLog?          @relation("SequenceEnrollmentSendEmailLog", fields: [emailLogId], references: [id], onDelete: SetNull)
@@ -956,20 +964,130 @@ model SequenceEnrollmentSend {
 // transitions before this phase — they're unrecoverable.
 
 model LeadStageHistory {
-  id          String     @id @default(uuid())
-  leadId      String     @map("lead_id")
-  fromStage   LeadStage  @map("from_stage")
-  toStage     LeadStage  @map("to_stage")
+  id         String    @id @default(uuid())
+  leadId     String    @map("lead_id")
+  fromStage  LeadStage @map("from_stage")
+  toStage    LeadStage @map("to_stage")
   /// 'manual' for user-driven UI changes; otherwise the existing Trigger
   /// union from StageAutomationService (email_sent, email_opened, etc.).
-  trigger     String
+  trigger    String
   /// Free-form attribution string until multi-tenant arrives.
-  actorLabel  String?    @map("actor_label")
-  occurredAt  DateTime   @default(now()) @map("occurred_at")
+  actorLabel String?   @map("actor_label")
+  occurredAt DateTime  @default(now()) @map("occurred_at")
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId, occurredAt])
   @@index([occurredAt])
   @@map("lead_stage_history")
+}
+
+// ─── Platform Core: Users, Workspaces, Members, Roles ────────────────────
+// Phase 1A foundation. Tenant-scoping of CRM tables comes in Phase 1B.
+
+enum WorkspaceStatus {
+  active
+  suspended
+  expired
+}
+
+enum MemberStatus {
+  active
+  invited
+  suspended
+}
+
+/// Global identity. One user may belong to many workspaces.
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String?   @map("password_hash")
+  name            String
+  avatarUrl       String?   @map("avatar_url")
+  /// Platform owner (us) — sees the Admin Panel across all workspaces.
+  isPlatformAdmin Boolean   @default(false) @map("is_platform_admin")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  memberships     WorkspaceMember[]
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
+
+  @@map("users")
+}
+
+/// One workspace per customer. All CRM data scopes to this in Phase 1B.
+model Workspace {
+  id           String          @id @default(uuid())
+  /// URL-friendly identifier (e.g. acme-corp). Used for subdomain routing later.
+  slug         String          @unique
+  name         String
+  status       WorkspaceStatus @default(active)
+  /// Max users this workspace may invite. Enforced server-side.
+  seatLimit    Int             @default(5) @map("seat_limit")
+  ownerId      String?         @map("owner_id")
+  /// Optional per-workspace branding.
+  logoUrl      String?         @map("logo_url")
+  primaryColor String?         @map("primary_color")
+  timezone     String          @default("Asia/Dhaka")
+  currency     String          @default("BDT")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  owner   User?             @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members WorkspaceMember[]
+  roles   Role[]
+
+  @@map("workspaces")
+}
+
+/// Workspace-scoped role. Permissions stored as an array of strings like "crm.lead.write".
+model Role {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  /// Stable identifier: "owner" | "admin" | "manager" | "sales" | "viewer" | custom.
+  key         String
+  name        String
+  description String?
+  /// Permission strings. Wildcards allowed: "crm.lead.*" or "*".
+  permissions String[]
+  /// Seeded defaults can't be deleted, only edited.
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   WorkspaceMember[]
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@map("roles")
+}
+
+/// User ↔ Workspace ↔ Role join. This is the "employee record" inside a workspace.
+model WorkspaceMember {
+  id          String       @id @default(uuid())
+  workspaceId String       @map("workspace_id")
+  userId      String       @map("user_id")
+  roleId      String       @map("role_id")
+  status      MemberStatus @default(active)
+  /// Optional display title shown in the UI ("Sales Rep", "Manager — North").
+  jobTitle    String?      @map("job_title")
+  invitedById String?      @map("invited_by_id")
+  invitedAt   DateTime?    @map("invited_at")
+  joinedAt    DateTime?    @map("joined_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  assignedTasks Task[] @relation("TaskAssignee")
+  createdTasks  Task[] @relation("TaskCreatedBy")
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, status])
+  @@index([userId])
+  @@map("workspace_members")
 }
