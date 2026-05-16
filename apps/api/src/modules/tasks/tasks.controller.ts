@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   TaskContext,
@@ -20,6 +21,9 @@ import {
   TasksService,
 } from './tasks.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
+import { AuthGuard } from '../auth/auth.guard';
+import { PermissionGuard } from '../auth/permission.guard';
+import { CurrentMember, RequirePermission } from '../auth/auth.decorators';
 
 const BUCKETS = new Set<TaskBucket>([
   'today',
@@ -50,6 +54,24 @@ export class TasksController {
   @Get('tasks')
   list(@Query() q: Record<string, string>) {
     return this.tasks.list(this.parseFilter(q));
+  }
+
+  /**
+   * Employee dashboard feed. Returns only tasks assigned to the caller,
+   * pre-bucketed into today / overdue / open / done.
+   */
+  @Get('tasks/mine')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('crm.task.read.assigned')
+  listMine(@CurrentMember() member: { id: string }) {
+    return this.tasks.listMine(member.id);
+  }
+
+  @Patch('tasks/:id/complete')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('crm.task.complete.own')
+  completeOwn(@CurrentMember() member: { id: string }, @Param('id') id: string) {
+    return this.tasks.completeOwn(member.id, id);
   }
 
   @Get('tasks/counts')
@@ -108,6 +130,7 @@ export class TasksController {
       bucket,
       leadId: q.leadId,
       assignedTo: q.assignedTo,
+      assigneeId: q.assigneeId,
       dueBefore: q.dueBefore ? new Date(q.dueBefore) : undefined,
       dueAfter: q.dueAfter ? new Date(q.dueAfter) : undefined,
       take: q.take ? Number(q.take) : undefined,

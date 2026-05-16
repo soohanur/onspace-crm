@@ -56,6 +56,11 @@ export class CreateTaskDto {
   @IsString()
   @MaxLength(200)
   assignedTo?: string;
+
+  /** New: FK to WorkspaceMember.id. Preferred over the free-form assignedTo. */
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string;
 }
 
 export class UpdateTaskDto {
@@ -98,4 +103,8 @@ export class UpdateTaskDto {
   @IsString()
   @MaxLength(200)
   assignedTo?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string | null;
 }

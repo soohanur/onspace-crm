@@ -140,11 +140,21 @@ export interface Task {
   completedAt: string | null;
   stageAtCreation: LeadStage;
   assignedTo: string | null;
+  assigneeId?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Present in list/findOne responses; not on create payloads. */
   lead?: TaskLeadRef;
   contact?: TaskContactRef | null;
+  assignee?: {
+    id: string;
+    jobTitle: string | null;
+    user: { id: string; name: string; email: string; avatarUrl: string | null };
+  } | null;
+  createdBy?: {
+    id: string;
+    user: { id: string; name: string; email: string };
+  } | null;
 }
 
 export interface CreateTaskInput {
@@ -158,6 +168,7 @@ export interface CreateTaskInput {
   context?: TaskContext;
   dueAt?: string;
   assignedTo?: string;
+  assigneeId?: string;
 }
 
 export type UpdateTaskInput = Partial<Omit<CreateTaskInput, 'leadId'>>;

@@ -10,6 +10,8 @@ import {
   TaskKind,
   TaskPriority,
 } from '@/lib/api';
+import { membersApi } from '@/lib/members';
+import { useAuth } from '@/components/AuthContext';
 import {
   TASK_CONTEXTS,
   TASK_KINDS,
@@ -45,12 +47,23 @@ export function TaskFormModal({
   onClose: () => void;
   onSubmit: (input: CreateTaskInput) => void;
 }) {
+  const { can } = useAuth();
+  const canAssignOthers = can('crm.task.assign');
+  const canSeeMembers = can('member.read');
+
   const [form, setForm] = useState<CreateTaskInput>({
     leadId: '',
     title: '',
     kind: 'general',
     context: 'none',
     priority: 'medium',
+  });
+
+  // Workspace members (for assignee picker). Only fetched if the caller can read them.
+  const { data: members = [] } = useQuery({
+    queryKey: ['members'],
+    queryFn: () => membersApi.list(),
+    enabled: open && canSeeMembers,
   });
 
   useEffect(() => {
@@ -65,6 +78,7 @@ export function TaskFormModal({
       priority: initial?.priority ?? 'medium',
       dueAt: initial?.dueAt ?? undefined,
       assignedTo: initial?.assignedTo ?? '',
+      assigneeId: initial?.assigneeId ?? undefined,
     });
   }, [open, initial, lockedLeadId]);
 
@@ -107,6 +121,7 @@ export function TaskFormModal({
                 contactId: form.contactId || undefined,
                 description: form.description?.trim() || undefined,
                 assignedTo: form.assignedTo?.trim() || undefined,
+                assigneeId: form.assigneeId || undefined,
               };
               onSubmit(payload);
             }
@@ -183,14 +198,25 @@ export function TaskFormModal({
                 }
               />
             </Field>
-            <Field label="Assigned to">
-              <Input
-                value={form.assignedTo ?? ''}
-                onChange={(e) =>
-                  setForm({ ...form, assignedTo: e.target.value })
-                }
-                placeholder="Free text"
-              />
+            <Field label="Assignee">
+              {canSeeMembers && canAssignOthers ? (
+                <Select
+                  value={form.assigneeId ?? ''}
+                  onChange={(v) => setForm({ ...form, assigneeId: v || undefined })}
+                  options={['', ...members.filter((m) => m.status === 'active').map((m) => m.id)]}
+                  labels={(v) => {
+                    if (v === '') return 'Unassigned';
+                    const m = members.find((x) => x.id === v);
+                    return m ? `${m.user.name} (${m.role.name})` : 'Unknown';
+                  }}
+                />
+              ) : (
+                <Input
+                  value={form.assignedTo ?? ''}
+                  onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+                  placeholder="Free text"
+                />
+              )}
             </Field>
           </div>
 

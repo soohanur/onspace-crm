@@ -23,12 +23,35 @@ export interface ListTasksFilter {
   priority?: TaskPriority[];
   leadId?: string;
   assignedTo?: string;
+  /** Filter by WorkspaceMember.id (preferred over assignedTo). */
+  assigneeId?: string;
   dueBefore?: Date;
   dueAfter?: Date;
   bucket?: TaskBucket;
   take?: number;
   cursor?: string;
 }
+
+/** Shared select used by every list/find — keeps response shape consistent. */
+const TASK_INCLUDE = {
+  lead: {
+    select: { id: true, businessName: true, stage: true, city: true, state: true },
+  },
+  contact: { select: { id: true, name: true, contactType: true } },
+  assignee: {
+    select: {
+      id: true,
+      jobTitle: true,
+      user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+    },
+  },
+  createdBy: {
+    select: {
+      id: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  },
+} as const;
 
 @Injectable()
 export class TasksService {
@@ -48,12 +71,7 @@ export class TasksService {
       ],
       take: take + 1,
       ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
-      include: {
-        lead: {
-          select: { id: true, businessName: true, stage: true, city: true, state: true },
-        },
-        contact: { select: { id: true, name: true, contactType: true } },
-      },
+      include: TASK_INCLUDE,
     });
     const hasMore = items.length > take;
     const trimmed = hasMore ? items.slice(0, take) : items;
@@ -83,12 +101,7 @@ export class TasksService {
   async findOne(id: string) {
     const t = await this.prisma.task.findUnique({
       where: { id },
-      include: {
-        lead: {
-          select: { id: true, businessName: true, stage: true, city: true, state: true },
-        },
-        contact: { select: { id: true, name: true, contactType: true } },
-      },
+      include: TASK_INCLUDE,
     });
     if (!t) throw new NotFoundException('Task not found');
     return t;
@@ -111,6 +124,15 @@ export class TasksService {
       }
     }
 
+    if (dto.assigneeId) {
+      const m = await this.prisma.workspaceMember.findUnique({
+        where: { id: dto.assigneeId },
+        select: { id: true, status: true },
+      });
+      if (!m) throw new BadRequestException('Assignee not found');
+      if (m.status !== 'active') throw new BadRequestException('Assignee is not active');
+    }
+
     const created = await this.prisma.task.create({
       data: {
         leadId: dto.leadId,
@@ -126,13 +148,9 @@ export class TasksService {
         // future filters can scope by "tasks created when lead was X".
         stageAtCreation: lead.stage,
         assignedTo: nullify(dto.assignedTo),
+        assigneeId: dto.assigneeId ?? null,
       },
-      include: {
-        lead: {
-          select: { id: true, businessName: true, stage: true, city: true, state: true },
-        },
-        contact: { select: { id: true, name: true, contactType: true } },
-      },
+      include: TASK_INCLUDE,
     });
     await this.followUpStatus.recompute(created.leadId);
     return created;
@@ -162,6 +180,19 @@ export class TasksService {
       data.dueAt = dto.dueAt ? new Date(dto.dueAt) : null;
     }
     if (dto.assignedTo !== undefined) data.assignedTo = nullify(dto.assignedTo);
+    if (dto.assigneeId !== undefined) {
+      if (dto.assigneeId) {
+        const m = await this.prisma.workspaceMember.findUnique({
+          where: { id: dto.assigneeId },
+          select: { id: true, status: true },
+        });
+        if (!m) throw new BadRequestException('Assignee not found');
+        if (m.status !== 'active') throw new BadRequestException('Assignee is not active');
+        data.assignee = { connect: { id: dto.assigneeId } };
+      } else {
+        data.assignee = { disconnect: true };
+      }
+    }
     if (dto.contactId !== undefined) {
       data.contact = dto.contactId
         ? { connect: { id: dto.contactId } }
@@ -181,12 +212,7 @@ export class TasksService {
     const updated = await this.prisma.task.update({
       where: { id },
       data,
-      include: {
-        lead: {
-          select: { id: true, businessName: true, stage: true, city: true, state: true },
-        },
-        contact: { select: { id: true, name: true, contactType: true } },
-      },
+      include: TASK_INCLUDE,
     });
     // Recompute follow-up status. The DTO doesn't currently allow leadId
     // changes, but if a future patch ever did move the task between leads
@@ -195,6 +221,56 @@ export class TasksService {
     if (existing.leadId !== updated.leadId) {
       await this.followUpStatus.recompute(existing.leadId);
     }
+    return updated;
+  }
+
+  /**
+   * Employee dashboard feed. Returns only tasks assigned to the given member,
+   * grouped into open / today / overdue / done buckets in a single round-trip.
+   */
+  async listMine(memberId: string) {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const rows = await this.prisma.task.findMany({
+      where: { assigneeId: memberId },
+      orderBy: [
+        { status: 'asc' },
+        { dueAt: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      include: TASK_INCLUDE,
+      take: 500,
+    });
+
+    const open: typeof rows = [];
+    const today: typeof rows = [];
+    const overdue: typeof rows = [];
+    const done: typeof rows = [];
+    for (const t of rows) {
+      if (t.status === 'done') { done.push(t); continue; }
+      if (t.dueAt && t.dueAt < startOfDay) { overdue.push(t); continue; }
+      if (t.dueAt && t.dueAt >= startOfDay && t.dueAt <= endOfDay) { today.push(t); continue; }
+      open.push(t);
+    }
+    return { today, overdue, open, done, total: rows.length };
+  }
+
+  /** Mark an assigned task complete. The member can only complete their own tasks. */
+  async completeOwn(memberId: string, taskId: string) {
+    const t = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!t) throw new NotFoundException('Task not found');
+    if (t.assigneeId !== memberId) {
+      throw new BadRequestException('You can only complete your own tasks');
+    }
+    if (t.status === 'done') return t;
+    const updated = await this.prisma.task.update({
+      where: { id: taskId },
+      data: { status: 'done', completedAt: new Date() },
+      include: TASK_INCLUDE,
+    });
+    await this.followUpStatus.recompute(updated.leadId);
     return updated;
   }
 
@@ -238,6 +314,7 @@ export class TasksService {
     if (f.kind) where.kind = f.kind;
     if (f.context) where.context = f.context;
     if (f.assignedTo) where.assignedTo = f.assignedTo;
+    if (f.assigneeId) where.assigneeId = f.assigneeId;
     if (f.status && f.status.length) where.status = { in: f.status };
     if (f.priority && f.priority.length) where.priority = { in: f.priority };
 
