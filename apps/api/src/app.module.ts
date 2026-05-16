@@ -4,6 +4,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './modules/health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { MembersModule } from './modules/members/members.module';
+import { RolesModule } from './modules/roles/roles.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { ScrapeModule } from './modules/scrape/scrape.module';
 import { SearchesModule } from './modules/searches/searches.module';
@@ -37,6 +39,8 @@ import { SequencesModule } from './modules/sequences/sequences.module';
     }),
     PrismaModule,
     AuthModule,
+    MembersModule,
+    RolesModule,
     LeadsModule,
     SearchesModule,
     ScrapeModule,

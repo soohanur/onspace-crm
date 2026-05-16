@@ -15,6 +15,8 @@ import {
   CheckSquare,
   BarChart3,
   Settings,
+  Users2,
+  ListTodo,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Logo } from './Logo';
@@ -31,7 +33,9 @@ const NAV = [
   { href: '/calls', label: 'Call Center', icon: Phone },
   { href: '/meetings', label: 'Meetings', icon: Calendar },
   { href: '/tasks', label: 'Tasks / Follow-ups', icon: CheckSquare },
+  { href: '/my', label: 'My Work', icon: ListTodo },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/team', label: 'Team', icon: Users2 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
