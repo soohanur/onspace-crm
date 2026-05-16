@@ -35,8 +35,9 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  const port = Number(process.env.API_PORT ?? 4000);
-  await app.listen(port);
+  // Render / Fly / Heroku inject PORT. Fallback to API_PORT for our local dev.
+  const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
+  await app.listen(port, '0.0.0.0');
   // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${port}/api`);
 }
