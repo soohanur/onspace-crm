@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { MembersModule } from './modules/members/members.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { ProfileModule } from './modules/profile/profile.module';
 import { LeadsModule } from './modules/leads/leads.module';
 import { ScrapeModule } from './modules/scrape/scrape.module';
 import { SearchesModule } from './modules/searches/searches.module';
@@ -43,6 +44,7 @@ import { SequencesModule } from './modules/sequences/sequences.module';
     MembersModule,
     RolesModule,
     AdminModule,
+    ProfileModule,
     LeadsModule,
     SearchesModule,
     ScrapeModule,
