@@ -14,9 +14,13 @@ services:
     # and skips devDependencies (which include the prisma CLI + nest CLI we
     # need for the build). --prod=false forces a full install. The runtime
     # process still runs as NODE_ENV=production.
+    # NODE_ENV=production at runtime is set via the env vars block below, but
+    # pnpm reads it during install too and skips devDependencies — which
+    # include the prisma + nest CLIs we need to build. We override NODE_ENV
+    # only for the install step (env scopes to that single command in sh).
     buildCommand: |
       npm install -g pnpm@9.12.0 && \
-      pnpm install --frozen-lockfile --prod=false && \
+      NODE_ENV=development pnpm install --frozen-lockfile && \
       pnpm --filter @onspace/db prisma:generate && \
       pnpm --filter @onspace/api build && \
       pnpm --filter @onspace/db exec prisma migrate deploy
