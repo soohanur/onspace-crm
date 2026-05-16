@@ -30,6 +30,25 @@ export interface AuthContext {
     name: string;
     permissions: string[];
   };
+  products: { key: string; name: string }[];
+  features: string[];
+  subscription: {
+    planName: string;
+    status: 'active' | 'expired' | 'suspended';
+    startsAt: string;
+    expiresAt: string;
+    daysRemaining: number;
+  } | null;
+}
+
+/** Returns true if the workspace has the given product enabled. */
+export function hasProduct(ctx: AuthContext | null, key: string): boolean {
+  return !!ctx?.products.some((p) => p.key === key);
+}
+
+/** Returns true if the workspace has the given feature enabled. */
+export function hasFeature(ctx: AuthContext | null, key: string): boolean {
+  return !!ctx?.features.includes(key);
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {

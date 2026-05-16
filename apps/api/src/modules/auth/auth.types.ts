@@ -41,6 +41,17 @@ export interface AuthenticatedRequestContext {
     name: string;
     permissions: string[];
   };
+  /** Products enabled for the active workspace. */
+  products: { key: string; name: string }[];
+  /** Feature keys enabled for the active workspace (e.g. ["crm.lead", "crm.email"]). */
+  features: string[];
+  subscription: {
+    planName: string;
+    status: 'active' | 'expired' | 'suspended';
+    startsAt: string;
+    expiresAt: string;
+    daysRemaining: number;
+  } | null;
 }
 
 export const ACCESS_COOKIE = 'onspace_access';

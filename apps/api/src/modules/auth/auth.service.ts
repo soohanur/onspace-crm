@@ -61,7 +61,7 @@ export class AuthService {
 
     return {
       token,
-      context: this.buildContext({
+      context: await this.buildContext({
         user,
         membership,
         workspace: membership.workspace,
@@ -91,12 +91,53 @@ export class AuthService {
     });
   }
 
-  private buildContext(args: {
+  // ── private ──
+
+  /**
+   * Fetch the workspace's products, features, and subscription.
+   * Used by login + resolveContext. Done in a single round-trip via Promise.all.
+   */
+  private async loadWorkspaceCapabilities(workspaceId: string) {
+    const [products, features, sub] = await Promise.all([
+      this.prisma.workspaceProduct.findMany({
+        where: { workspaceId, enabled: true },
+        include: { product: { select: { key: true, name: true } } },
+      }),
+      this.prisma.workspaceFeature.findMany({
+        where: { workspaceId, enabled: true },
+        include: { feature: { select: { key: true } } },
+      }),
+      this.prisma.subscription.findUnique({ where: { workspaceId } }),
+    ]);
+    return {
+      products: products.map((p) => ({ key: p.product.key, name: p.product.name })),
+      features: features.map((f) => f.feature.key),
+      subscription: sub,
+    };
+  }
+
+  private async buildContext(args: {
     user: { id: string; email: string; name: string; isPlatformAdmin: boolean };
     membership: { id: string; roleId: string; status: string; jobTitle: string | null };
     workspace: { id: string; slug: string; name: string; status: string };
     role: { id: string; key: string; name: string; permissions: string[] };
-  }): AuthenticatedRequestContext {
+  }): Promise<AuthenticatedRequestContext> {
+    const caps = await this.loadWorkspaceCapabilities(args.workspace.id);
+
+    let subscription: AuthenticatedRequestContext['subscription'] = null;
+    if (caps.subscription) {
+      const now = Date.now();
+      const exp = caps.subscription.expiresAt.getTime();
+      const daysRemaining = Math.max(0, Math.ceil((exp - now) / (24 * 60 * 60 * 1000)));
+      subscription = {
+        planName: caps.subscription.planName,
+        status: caps.subscription.status,
+        startsAt: caps.subscription.startsAt.toISOString(),
+        expiresAt: caps.subscription.expiresAt.toISOString(),
+        daysRemaining,
+      };
+    }
+
     return {
       user: {
         id: args.user.id,
@@ -122,6 +163,9 @@ export class AuthService {
         name: args.role.name,
         permissions: args.role.permissions,
       },
+      products: caps.products,
+      features: caps.features,
+      subscription,
     };
   }
 }

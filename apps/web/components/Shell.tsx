@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
-const CHROMELESS_PATHS = ['/login'];
+const CHROMELESS_PATHS = ['/login', '/admin'];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '';

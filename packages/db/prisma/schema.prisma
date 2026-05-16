@@ -1034,11 +1034,139 @@ model Workspace {
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
 
-  owner   User?             @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  members WorkspaceMember[]
-  roles   Role[]
+  owner        User?              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  members      WorkspaceMember[]
+  roles        Role[]
+  products     WorkspaceProduct[]
+  features     WorkspaceFeature[]
+  subscription Subscription?
+  audits       AuditLog[]
 
   @@map("workspaces")
+}
+
+// ─── Platform: Products + Features + Subscriptions ───────────────────────
+// Catalog of products we sell (CRM, ERP, Accounting, Restaurant, Shop, …).
+// Each Workspace can have any subset enabled. Inside each Product, individual
+// features are toggleable per workspace too (e.g. crm.email.send).
+
+enum SubStatus {
+  active
+  expired
+  suspended
+}
+
+/// Catalog row. Seeded by us; not editable from a customer workspace.
+model Product {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  /// Lower = earlier in lists.
+  sortOrder   Int      @default(100) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  features          Feature[]
+  workspaceProducts WorkspaceProduct[]
+
+  @@map("products")
+}
+
+/// A capability inside a product. Key matches the permission string root:
+/// e.g. "crm.email" → toggleable feature; permissions "crm.email.send" / "crm.email.read"
+/// gate inside that feature.
+model Feature {
+  id             String   @id @default(uuid())
+  productId      String   @map("product_id")
+  key            String
+  name           String
+  description    String?
+  /// If true, customer gets this for free with the product; admin can still disable.
+  defaultEnabled Boolean  @default(true) @map("default_enabled")
+  sortOrder      Int      @default(100) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  workspaceFeatures WorkspaceFeature[]
+
+  @@unique([productId, key])
+  @@map("features")
+}
+
+/// Workspace ↔ Product join. Toggleable from Admin Panel.
+model WorkspaceProduct {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  productId   String   @map("product_id")
+  enabled     Boolean  @default(true)
+  enabledAt   DateTime @default(now()) @map("enabled_at")
+  notes       String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, productId])
+  @@index([workspaceId])
+  @@map("workspace_products")
+}
+
+/// Workspace ↔ Feature join. Overrides Feature.defaultEnabled.
+model WorkspaceFeature {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  featureId   String   @map("feature_id")
+  enabled     Boolean
+  changedById String?  @map("changed_by_id")
+  changedAt   DateTime @default(now()) @map("changed_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  feature   Feature   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, featureId])
+  @@index([workspaceId])
+  @@map("workspace_features")
+}
+
+/// Offline-sold subscription. Admin enters dates/amount after deal closes.
+/// Cron flips to expired/suspended; AuthGuard then blocks access.
+model Subscription {
+  id          String    @id @default(uuid())
+  workspaceId String    @unique @map("workspace_id")
+  planName    String    @map("plan_name")
+  startsAt    DateTime  @map("starts_at")
+  expiresAt   DateTime  @map("expires_at")
+  status      SubStatus @default(active)
+  amountPaid  Decimal?  @map("amount_paid") @db.Decimal(12, 2)
+  currency    String    @default("BDT")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, expiresAt])
+  @@map("subscriptions")
+}
+
+// ─── Audit log ───────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  workspaceId String?  @map("workspace_id")
+  actorUserId String?  @map("actor_user_id")
+  /// e.g. "workspace.create", "member.invite", "feature.toggle"
+  action      String
+  /// Free-form JSON payload — old/new values, target ids.
+  meta        Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_log")
 }
 
 /// Workspace-scoped role. Permissions stored as an array of strings like "crm.lead.write".

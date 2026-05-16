@@ -164,6 +164,76 @@ async function main() {
     },
   });
 
+  // ─── CRM Product + Features + activate for Internal workspace ─────────
+  console.log('→ seeding CRM product + features');
+  const crm = await prisma.product.upsert({
+    where: { key: 'crm' },
+    update: { name: 'OnspaceCRM', description: 'Leads, contacts, groups, tasks, email outreach.' },
+    create: {
+      key: 'crm',
+      name: 'OnspaceCRM',
+      description: 'Leads, contacts, groups, tasks, email outreach.',
+      sortOrder: 10,
+    },
+  });
+
+  const featureDefs = [
+    { key: 'crm.lead',     name: 'Leads',        description: 'Browse and edit lead records.' },
+    { key: 'crm.scraper',  name: 'Lead scraper', description: 'YellowPages-style lead scraping.' },
+    { key: 'crm.contact',  name: 'Contacts',     description: 'Multi-contact lead enrichment.' },
+    { key: 'crm.group',    name: 'Lead groups',  description: 'Manual + smart lead groups.' },
+    { key: 'crm.note',     name: 'Notes',        description: 'Per-lead notes.' },
+    { key: 'crm.task',     name: 'Tasks',        description: 'Tasks + follow-up assignment.' },
+    { key: 'crm.email',    name: 'Email send',   description: 'Gmail OAuth + transactional email.' },
+    { key: 'crm.campaign', name: 'Campaigns',    description: 'Email campaigns + recipient tracking.' },
+    { key: 'crm.sequence', name: 'Sequences',    description: 'Multi-step email sequences.' },
+    { key: 'crm.meeting',  name: 'Meetings',     description: 'Meeting scheduling + history.' },
+    { key: 'crm.call',     name: 'Call center',  description: 'Outbound + inbound call log.' },
+    { key: 'crm.proposal', name: 'Proposals',    description: 'Proposal sending.' },
+    { key: 'crm.report',   name: 'Reports',      description: 'Pipeline / activity reports.' },
+  ];
+  const featureMap = new Map<string, string>();
+  for (const f of featureDefs) {
+    const row = await prisma.feature.upsert({
+      where: { productId_key: { productId: crm.id, key: f.key } },
+      update: { name: f.name, description: f.description },
+      create: { productId: crm.id, ...f },
+    });
+    featureMap.set(f.key, row.id);
+  }
+
+  console.log('→ enabling CRM for Internal workspace');
+  await prisma.workspaceProduct.upsert({
+    where: { workspaceId_productId: { workspaceId: workspace.id, productId: crm.id } },
+    update: { enabled: true },
+    create: { workspaceId: workspace.id, productId: crm.id, enabled: true },
+  });
+  for (const [, featureId] of featureMap) {
+    await prisma.workspaceFeature.upsert({
+      where: { workspaceId_featureId: { workspaceId: workspace.id, featureId } },
+      update: { enabled: true },
+      create: { workspaceId: workspace.id, featureId, enabled: true },
+    });
+  }
+
+  console.log('→ ensuring active subscription for Internal workspace');
+  const now = new Date();
+  const oneYearOut = new Date(now);
+  oneYearOut.setFullYear(oneYearOut.getFullYear() + 1);
+  await prisma.subscription.upsert({
+    where: { workspaceId: workspace.id },
+    update: {},
+    create: {
+      workspaceId: workspace.id,
+      planName: 'Internal',
+      startsAt: now,
+      expiresAt: oneYearOut,
+      status: 'active',
+      currency: 'BDT',
+      notes: 'Internal dogfood workspace; never expires automatically.',
+    },
+  });
+
   console.log('\n✓ seed complete');
   console.log(`  login → email: ${email}`);
   console.log(`           pass:  ${password === 'changeme' ? 'changeme (change this!)' : '<from env>'}`);
