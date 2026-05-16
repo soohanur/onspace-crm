@@ -1,11 +1,32 @@
 'use client';
 
+// useSearchParams in Next 15 production build requires either a Suspense
+// boundary above the consumer OR opting the route out of static prerender.
+// We do both so the chunk renders happily during `next build` and at runtime.
+export const dynamic = 'force-dynamic';
+
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
 
 import { useAuth } from '@/components/AuthContext';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginBody />
+    </Suspense>
+  );
+}
+
+function LoginFallback() {
+  return (
+    <div className="min-h-[calc(100vh-3rem)] flex items-center justify-center px-6 text-ink-muted">
+      Loading…
+    </div>
+  );
+}
+
+function LoginBody() {
   const router = useRouter();
   const search = useSearchParams();
   const next = search.get('next') ?? '/';
@@ -16,7 +37,6 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Already logged in → bounce.
   useEffect(() => {
     if (!loading && ctx) router.replace(next);
   }, [loading, ctx, next, router]);
