@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: onspace-api
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    rootDir: .
+    autoDeploy: true
+    # corepack enable fails on Render (/usr/bin is read-only), so we install
+    # pnpm via npm global. Build then: install deps → generate prisma client →
+    # compile NestJS → apply pending migrations against the configured DB.
+    buildCommand: |
+      npm install -g pnpm@9.12.0 && \
+      pnpm install --frozen-lockfile && \
+      pnpm --filter @onspace/db prisma:generate && \
+      pnpm --filter @onspace/api build && \
+      pnpm --filter @onspace/db exec prisma migrate deploy
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: PLATFORM_ADMIN_EMAIL
+        value: admin@onspace.local
+      # Secrets — set in Render dashboard (sync: false means they are not
+      # pulled from this file; Render preserves the dashboard value across
+      # deploys).
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: PLATFORM_ADMIN_PASSWORD
+        sync: false
