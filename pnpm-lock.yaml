@@ -83,6 +83,9 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      express:
+        specifier: ^4.22.1
+        version: 4.22.1
       googleapis:
         specifier: ^171.4.0
         version: 171.4.0
