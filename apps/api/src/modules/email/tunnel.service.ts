@@ -44,6 +44,27 @@ export class TunnelService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // In production we never auto-spawn cloudflared / ngrok — managed hosts
+    // (Render/Fly/etc.) already provide a public URL via PUBLIC_API_URL, and
+    // binaries like `cloudflared` aren't on PATH. The fallback below would
+    // ENOENT-crash the whole process.
+    if (process.env.NODE_ENV === 'production') {
+      const env = (process.env.PUBLIC_API_URL || '').trim();
+      if (env && !this.isLocalhost(env)) {
+        this._url = env;
+        this._provider = 'env';
+        this._status = 'active';
+        this.startedAt = new Date();
+        this.log.log(`PUBLIC_API_URL set → using ${env}`);
+      } else {
+        this.log.warn(
+          'production: no PUBLIC_API_URL set — pixel tracking will use ' +
+            'reply-inference only. Set PUBLIC_API_URL to enable.',
+        );
+      }
+      return;
+    }
+
     // 1. Explicit env wins (production).
     const env = (process.env.PUBLIC_API_URL || '').trim();
     if (env && !this.isLocalhost(env)) {
@@ -138,6 +159,23 @@ export class TunnelService implements OnModuleInit, OnModuleDestroy {
 
       this.cfdProc = proc;
       let resolved = false;
+
+      // ENOENT (binary missing) fires asynchronously on the error event.
+      // Without this listener Node throws "Unhandled 'error' event" and
+      // terminates the whole process.
+      proc.on('error', (err) => {
+        if (!resolved) {
+          resolved = true;
+          this._status = 'error';
+          this._error =
+            err instanceof Error && (err as any).code === 'ENOENT'
+              ? 'cloudflared binary not found on PATH'
+              : err.message;
+          this.log.warn(`cloudflared not available: ${this._error}`);
+          resolve(false);
+        }
+      });
+
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
