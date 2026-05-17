@@ -14,14 +14,15 @@ services:
     # and skips devDependencies (which include the prisma CLI + nest CLI we
     # need for the build). --prod=false forces a full install. The runtime
     # process still runs as NODE_ENV=production.
-    # Prisma + Nest CLIs now live in production dependencies, so the install
-    # works fine with the default NODE_ENV=production.
+    # Build = compile only. Migrations are applied manually from local against
+    # Neon when schema changes (pnpm db:migrate). Running migrate on every
+    # deploy means a single failed migration row poisons every future build
+    # (Prisma P3009).
     buildCommand: |
       npm install -g pnpm@9.12.0 && \
       pnpm install --frozen-lockfile && \
       pnpm --filter @onspace/db prisma:generate && \
-      pnpm --filter @onspace/api build && \
-      pnpm --filter @onspace/db exec prisma migrate deploy
+      pnpm --filter @onspace/api build
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
