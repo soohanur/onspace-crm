@@ -7,8 +7,14 @@ import { ThemeMount } from '@/components/ThemeMount';
 import { AuthProvider } from '@/components/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'OnspaceCRM',
-  description: 'Lead scraping and CRM platform',
+  title: {
+    default: 'OnspaceCRM',
+    template: '%s · OnspaceCRM',
+  },
+  description: 'CRM + lead generation built for SME teams in Bangladesh.',
+  applicationName: 'OnspaceCRM',
+  authors: [{ name: 'Onspace' }],
+  robots: { index: false, follow: false },
 };
 
 // Pre-paint theme application — must run BEFORE first paint to avoid the
