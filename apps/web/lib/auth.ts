@@ -53,15 +53,26 @@ export function hasFeature(ctx: AuthContext | null, key: string): boolean {
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}/api/auth${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/auth${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      cache: 'no-store',
+    });
+  } catch (e) {
+    // Browser threw before any response — DNS miss, CORS preflight blocked,
+    // cold-starting Render free instance, offline, etc. Replace the opaque
+    // "Failed to fetch" with something the user can act on.
+    throw new Error(
+      'Could not reach Onspace. Check your internet, or the server may be ' +
+        'waking up — retry in 30 seconds.',
+    );
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {
