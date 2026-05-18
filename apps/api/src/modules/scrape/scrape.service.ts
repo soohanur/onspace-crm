@@ -1,5 +1,10 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateScrapeJobDto } from './dto';
@@ -21,6 +26,16 @@ export class ScrapeService {
   ) {}
 
   async create(dto: CreateScrapeJobDto) {
+    // Render free / similar managed hosts can't ship Python + Playwright +
+    // Chromium. Operator opts-in by setting SCRAPER_DISABLED=1 and we refuse
+    // the request loudly instead of letting it hit ENOENT in the worker.
+    if (process.env.SCRAPER_DISABLED === '1') {
+      throw new ServiceUnavailableException(
+        'Scraper is disabled on this server. Run the API locally or deploy ' +
+          'to a host that ships Python + Chromium to use lead scraping.',
+      );
+    }
+
     const job = await this.prisma.scrapeJob.create({
       data: {
         searchQuery: dto.searchQuery.trim(),

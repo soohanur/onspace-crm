@@ -229,29 +229,36 @@ export default function LeadScraperPage() {
 
       {/* Finished-job banner — lets the user dismiss the previous job */}
       {!isLive && job && (
-        <Card className="!py-3 flex items-center gap-3">
-          <Chip
-            tone={
-              job.status === 'done'
-                ? 'positive'
-                : job.status === 'failed'
-                ? 'negative'
-                : 'neutral'
-            }
-          >
-            {job.status}
-          </Chip>
-          <div className="text-bodysm">
-            Showing <span className="font-medium text-ink">{job.searchQuery}</span> in{' '}
-            <span className="font-medium text-ink">{job.searchLocation}</span>
-            {' '}— {stats?.total ?? 0} leads saved
+        <Card className="!py-3">
+          <div className="flex items-center gap-3">
+            <Chip
+              tone={
+                job.status === 'done'
+                  ? 'positive'
+                  : job.status === 'failed'
+                  ? 'negative'
+                  : 'neutral'
+              }
+            >
+              {job.status}
+            </Chip>
+            <div className="text-bodysm">
+              Showing <span className="font-medium text-ink">{job.searchQuery}</span> in{' '}
+              <span className="font-medium text-ink">{job.searchLocation}</span>
+              {' '}— {stats?.total ?? 0} leads saved
+            </div>
+            <button
+              onClick={clearActiveJob}
+              className="ml-auto text-caption text-ink-muted hover:text-error"
+            >
+              Clear & start fresh
+            </button>
           </div>
-          <button
-            onClick={clearActiveJob}
-            className="ml-auto text-caption text-ink-muted hover:text-error"
-          >
-            Clear & start fresh
-          </button>
+          {job.status === 'failed' && job.error && (
+            <div className="mt-2 text-bodysm text-error">
+              <b>Reason:</b> {job.error}
+            </div>
+          )}
         </Card>
       )}
 

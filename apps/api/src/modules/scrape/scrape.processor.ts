@@ -69,13 +69,20 @@ export class ScrapeProcessor extends WorkerHost {
       return { ok: true, totalSaved };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // Translate the ENOENT case (Python or Chromium not installed) into a
+      // user-facing hint instead of the raw spawn error. Happens on managed
+      // hosts like Render free that don't ship the scraper runtime.
+      const friendly =
+        err instanceof Error && (err as any).code === 'ENOENT'
+          ? 'Scraper runtime (Python + Chromium) is not installed on this server. Run locally or deploy the API to a host that ships them.'
+          : message;
       this.log.error(`scrape ${jobId} failed: ${message}`);
       await this.prisma.scrapeJob.update({
         where: { id: jobId },
         data: {
           status: 'failed',
           finishedAt: new Date(),
-          error: message,
+          error: friendly,
         },
       });
       throw err;
