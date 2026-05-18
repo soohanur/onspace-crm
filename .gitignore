@@ -45,3 +45,13 @@ apps/api/uploads/
 
 # local-only prompt drafts / scratch specs
 prompts/
+
+# editor scratch + OS noise
+*.swp
+*.swo
+Thumbs.db
+desktop.ini
+
+# Vercel CLI artifacts
+.vercel
+
