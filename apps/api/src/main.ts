@@ -4,18 +4,20 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { WorkerModule } from './worker.module';
 
 /**
- * WORKER_ONLY=1 boots a Nest application context with no HTTP listener.
- * BullMQ workers and other event-driven modules still initialise, so this
- * is how a remote scraper / queue consumer runs the same binary as the API.
+ * WORKER_ONLY=1 boots a slim Nest context that registers only the scrape
+ * queue + processor (not the full AppModule). Loading every BullMQ queue
+ * doubles polling traffic on the shared Upstash Redis and trivially blows
+ * past the free-tier daily command quota.
  */
 async function bootstrapWorker() {
-  const app = await NestFactory.createApplicationContext(AppModule, {
+  const app = await NestFactory.createApplicationContext(WorkerModule, {
     logger: ['log', 'warn', 'error'],
   });
   await app.init();
-  Logger.log('[worker] Nest context up — consuming jobs only (no HTTP)', 'bootstrap');
+  Logger.log('[worker] slim Nest context up — scrape queue only', 'bootstrap');
   // Keep process alive so workers stay registered.
   await new Promise(() => {});
 }

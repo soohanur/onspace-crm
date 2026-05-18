@@ -1,0 +1,41 @@
+# Local-only artefacts — must never leak into the build context. They
+# pollute the cache and (for tsbuildinfo) cause tsc to silently skip files
+# it thinks are already compiled.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/tsconfig.tsbuildinfo
+**/.pnpm-store
+
+# Env + secrets
+.env
+.env.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+*.swp
+
+# Logs
+*.log
+.dev-logs
+
+# Python venv (huge + machine-specific)
+**/__pycache__
+**/.venv
+**/venv
+
+# Playwright local artifacts
+playwright-report
+test-results
+
+# Repo metadata not needed at build
+.git
+.github
+docs
+prompts
