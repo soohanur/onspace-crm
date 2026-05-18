@@ -44,17 +44,26 @@ export class AuthController {
 
   private setCookie(res: Response, token: string) {
     const ttlSeconds = this.parseTtl(process.env.JWT_ACCESS_TTL ?? '15m');
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie(ACCESS_COOKIE, token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      // Production runs web on Vercel + api on Render = cross-site requests.
+      // Browsers require SameSite=None + Secure for the cookie to be sent on
+      // cross-site fetches. Dev keeps SameSite=Lax because Secure=false there.
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
       maxAge: ttlSeconds * 1000,
       path: '/',
     });
   }
 
   private clearCookie(res: Response) {
-    res.clearCookie(ACCESS_COOKIE, { path: '/' });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie(ACCESS_COOKIE, {
+      path: '/',
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
+    });
   }
 
   private parseTtl(s: string): number {
