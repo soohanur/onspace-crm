@@ -3,7 +3,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -22,20 +22,13 @@ export class ScrapeService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(SCRAPE_QUEUE) private readonly queue: Queue<ScrapeJobPayload>,
-    private readonly processor: ScrapeProcessor,
+    // ScrapeProcessor only exists on hosts that consume the queue (worker
+    // containers, local dev). On Render free / Vercel the API only enqueues,
+    // so the processor isn't registered and this injection stays undefined.
+    @Optional() private readonly processor: ScrapeProcessor | null,
   ) {}
 
   async create(dto: CreateScrapeJobDto) {
-    // Render free / similar managed hosts can't ship Python + Playwright +
-    // Chromium. Operator opts-in by setting SCRAPER_DISABLED=1 and we refuse
-    // the request loudly instead of letting it hit ENOENT in the worker.
-    if (process.env.SCRAPER_DISABLED === '1') {
-      throw new ServiceUnavailableException(
-        'Scraper is disabled on this server. Run the API locally or deploy ' +
-          'to a host that ships Python + Chromium to use lead scraping.',
-      );
-    }
-
     const job = await this.prisma.scrapeJob.create({
       data: {
         searchQuery: dto.searchQuery.trim(),
@@ -87,8 +80,11 @@ export class ScrapeService {
       data: { status: 'cancelled', finishedAt: new Date() },
     });
 
-    // Best-effort: kill the running python subprocess.
-    const killed = this.processor.cancelJob(id);
+    // Best-effort: kill the running python subprocess. Only the host that
+    // actually runs the worker has the processor; on API-only hosts (Render
+    // free) this is a no-op and the worker will notice the DB status flip on
+    // its next tick.
+    const killed = this.processor?.cancelJob(id) ?? false;
 
     // Also remove the BullMQ job if still queued.
     try {

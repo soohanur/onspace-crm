@@ -1,0 +1,50 @@
+# Scraper worker image — Node 22 + Python 3.12 + Chromium baked in.
+# Built from Microsoft's official Playwright Python image so we don't have
+# to manage Chromium downloads ourselves.
+#
+# This is the same NestJS API binary, but boots in WORKER_ONLY mode (no HTTP
+# listener) and consumes scrape jobs from the shared Upstash queue, writing
+# results back to the shared Neon Postgres. Production Render API enqueues,
+# this worker (running on user laptop / BD VPS / Fly) does the heavy lifting.
+
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Node 22 + corepack (for pnpm)
+RUN apt-get update && \
+    apt-get install -y curl ca-certificates gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm@9.12.0 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Workspace install — copy manifests first to maximise Docker layer cache.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY packages/db/package.json packages/db/
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/config/package.json packages/config/
+COPY apps/api/package.json apps/api/
+COPY apps/scraper/package.json apps/scraper/
+
+RUN pnpm install --frozen-lockfile
+
+# Build TypeScript
+COPY packages packages
+COPY apps/api apps/api
+RUN pnpm --filter @onspace/db prisma:generate && \
+    pnpm --filter @onspace/api build
+
+# Python scraper
+COPY apps/scraper apps/scraper
+RUN cd apps/scraper && pip install --no-cache-dir -r requirements.txt
+
+# Runtime config — point at Upstash + Neon via env at run time.
+ENV NODE_ENV=production
+ENV WORKER_ONLY=1
+ENV SCRAPER_PYTHON=python3
+ENV TUNNEL_DISABLED=1
+
+CMD ["node", "apps/api/dist/main.js"]

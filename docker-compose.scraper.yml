@@ -1,0 +1,32 @@
+# Local scraper worker — runs on your laptop, consumes jobs from the same
+# Upstash queue the production API enqueues to, writes leads back to the
+# same Neon Postgres. Production sees results in real time.
+#
+# Usage:
+#   docker compose -f docker-compose.scraper.yml up --build
+#
+# Required env (reads from .env at the repo root):
+#   DATABASE_URL — Neon connection string
+#   REDIS_URL    — Upstash rediss:// URL
+#
+# Stop with Ctrl+C. The container exits cleanly; in-flight jobs finish first.
+
+services:
+  scraper-worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.worker
+    container_name: onspace-scraper-worker
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      WORKER_ONLY: '1'
+      SCRAPER_PYTHON: python3
+      TUNNEL_DISABLED: '1'
+      # The compose-level overrides above take precedence over .env, so the
+      # worker stays in the right mode even if .env carries dev defaults.
+    restart: unless-stopped
+    # Playwright sometimes needs more shared memory than Docker's default
+    # 64 MB to render large pages without crashing.
+    shm_size: '512m'

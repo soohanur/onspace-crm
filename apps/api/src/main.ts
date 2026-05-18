@@ -1,9 +1,24 @@
 import 'reflect-metadata';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+
+/**
+ * WORKER_ONLY=1 boots a Nest application context with no HTTP listener.
+ * BullMQ workers and other event-driven modules still initialise, so this
+ * is how a remote scraper / queue consumer runs the same binary as the API.
+ */
+async function bootstrapWorker() {
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: ['log', 'warn', 'error'],
+  });
+  await app.init();
+  Logger.log('[worker] Nest context up — consuming jobs only (no HTTP)', 'bootstrap');
+  // Keep process alive so workers stay registered.
+  await new Promise(() => {});
+}
 
 async function bootstrap() {
   // CORS origin(s) — comma-separated FRONTEND_URL list lets one deployment
@@ -42,4 +57,8 @@ async function bootstrap() {
   console.log(`[api] listening on http://localhost:${port}/api`);
 }
 
-bootstrap();
+if (process.env.WORKER_ONLY === '1') {
+  bootstrapWorker();
+} else {
+  bootstrap();
+}
