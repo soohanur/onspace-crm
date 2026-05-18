@@ -12,6 +12,11 @@ import { Autocomplete } from '@/components/Autocomplete';
 import { LeadsTable } from '@/components/LeadsTable';
 import { Loader2, Play, Square } from 'lucide-react';
 
+// Set NEXT_PUBLIC_SCRAPER_DISABLED=1 on hosts that can't run the Python
+// Playwright subprocess (e.g. Render free instances). Page still renders;
+// the start action is gated and a banner explains why.
+const SCRAPER_DISABLED = process.env.NEXT_PUBLIC_SCRAPER_DISABLED === '1';
+
 export default function LeadScraperPage() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
@@ -109,6 +114,15 @@ export default function LeadScraperPage() {
           Scrape YellowPages by category + location. Results stream in below.
         </p>
       </div>
+
+      {SCRAPER_DISABLED && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <b>Scraper disabled on this host.</b> The Python Playwright runner is
+          not available on the current deployment (free Render instance).
+          Run locally with <code className="font-mono">pnpm dev</code> or
+          deploy the API to a host that ships <code>chromium</code>.
+        </div>
+      )}
 
       {/* Form */}
       <Card>
