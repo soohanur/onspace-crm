@@ -96,3 +96,38 @@ infra/docker/  docker-compose for Postgres + Redis
 3. **Email Campaigns** — SES/SendGrid integration with open/click tracking.
 4. **Workflow engine** — JSON-rule triggers on events (`email.opened` → update stage).
 5. **Multi-tenant + auth** — JWT, RBAC, `tenant_id` on every row.
+
+## Production deployment (free tier)
+
+| Layer | Service | Why |
+|---|---|---|
+| Web (Next.js) | [Vercel](https://vercel.com) Hobby | Free, edge CDN, custom domain |
+| API (NestJS) | [Render](https://render.com) free | Free Node web service |
+| Postgres | [Neon](https://neon.tech) free | 0.5 GB, no expiry, branches |
+| Redis | [Upstash](https://upstash.com) free | 10k cmd/day, serverless TLS |
+
+### Environment variables
+
+API (Render):
+```
+DATABASE_URL=postgresql://...neon.tech/...?sslmode=require
+REDIS_URL=rediss://default:...@...upstash.io:6379
+JWT_SECRET=<openssl rand -hex 32>
+FRONTEND_URL=https://<your>.vercel.app
+NODE_ENV=production
+PLATFORM_ADMIN_EMAIL=admin@onspace.local
+PLATFORM_ADMIN_PASSWORD=<strong>
+```
+
+Web (Vercel):
+```
+NEXT_PUBLIC_API_URL=https://<your>.onrender.com
+```
+
+Migrations apply manually from your laptop:
+```bash
+pnpm db:migrate
+pnpm db:seed
+```
+
+See [render.yaml](render.yaml) for the API Blueprint config.
