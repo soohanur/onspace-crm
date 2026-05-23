@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# One-shot dev launcher. Brings up Postgres + Redis + API + Web.
-#   - Kills anything on ports 3000/4000 first (no port-collision surprises).
-#   - Starts Postgres + Redis if they aren't already up.
-#   - Builds the API once and runs the compiled dist (this is what's been
-#     ship-tested every phase; `nest start --watch` randomly stalls).
-#   - Wipes apps/web/.next then runs `next dev` (avoids the recurring
-#     "Cannot find module ./vendor-chunks/..." poison from prior builds).
-#   - Streams both logs to this terminal with [api] / [web] prefixes.
-#   - Ctrl-C cleanly stops the API + Web children. Postgres/Redis stay up.
+# One-shot dev launcher.
 #
-# NOTE: this script does NOT run prisma migrations. Run them by hand
-# after a `git pull` that touched packages/db:
-#   cd packages/db && pnpm exec prisma migrate deploy
+# Reads DATABASE_URL + REDIS_URL from .env at the repo root and works with:
+#   - cloud DB/Redis (Neon + Upstash) — skips local infra
+#   - local docker (postgres + redis on :5432 / :6379) — starts via
+#     `pnpm infra:up` if not already running
+#
+# Behaviour:
+#   - Kills anything on ports 3000/4000 first (no collision surprises).
+#   - Builds the API once and runs the compiled dist (nest --watch has
+#     historically been flaky in this repo).
+#   - Wipes apps/web/.next then runs `next dev`.
+#   - Streams both logs to this terminal with [api] / [web] prefixes.
+#   - Ctrl-C cleanly stops the API + Web children.
+#
+# Migrations are NOT auto-applied. Run by hand when packages/db changes:
+#   pnpm db:migrate
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEV_HOME="${ONSPACE_DEV_HOME:-$HOME/.local/onspace-dev}"
 LOG_DIR="$ROOT/.dev-logs"
 mkdir -p "$LOG_DIR"
 
@@ -34,23 +37,7 @@ pkill -f "next-server" 2>/dev/null || true
 pkill -f "node dist/main" 2>/dev/null || true
 sleep 1
 
-# ─── 2. Postgres ───────────────────────────────────────────────────────
-if ! ss -tln 2>/dev/null | grep -q ":5432"; then
-  echo "[dev] starting postgres..."
-  "$DEV_HOME/pg/bin/pg_ctl" -D "$DEV_HOME/data" \
-    -l "$DEV_HOME/logs/pg.log" \
-    -o "-p 5432 -k /tmp" start
-fi
-
-# ─── 3. Redis ──────────────────────────────────────────────────────────
-if ! ss -tln 2>/dev/null | grep -q ":6379"; then
-  echo "[dev] starting redis..."
-  "$DEV_HOME/bin/redis-server" --port 6379 --daemonize yes \
-    --dir "$DEV_HOME/redis-data" \
-    --logfile "$DEV_HOME/logs/redis.log"
-fi
-
-# ─── 4. Env ────────────────────────────────────────────────────────────
+# ─── 2. Load .env ──────────────────────────────────────────────────────
 set -a
 # shellcheck disable=SC1090,SC1091
 [ -f "$ROOT/.env" ] && source "$ROOT/.env"
@@ -61,14 +48,71 @@ export API_PORT="${API_PORT:-4000}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4000}"
 set +a
 
-# ─── 5. Build API ──────────────────────────────────────────────────────
-echo "[dev] building api..."
-(cd "$ROOT/apps/api" && rm -f tsconfig.tsbuildinfo && pnpm exec nest build >/dev/null)
+# If .env points at a remote redis (Upstash etc.) but local redis is
+# already listening on 6379, prefer local — BullMQ polls Redis aggressively
+# and a free remote quota burns out in minutes. Override with
+# `DEV_USE_CLOUD_REDIS=1` in your env to opt back into the remote one.
+if [ "${DEV_USE_CLOUD_REDIS:-0}" != "1" ] \
+   && ss -tln 2>/dev/null | grep -q ":6379" \
+   && [ -n "${REDIS_URL:-}" ] \
+   && ! echo "$REDIS_URL" | grep -qE "localhost|127\.0\.0\.1"; then
+  echo "[dev] overriding REDIS_URL → redis://localhost:6379 (local redis is up; BullMQ polls hammer cloud quotas)"
+  export REDIS_URL="redis://localhost:6379"
+  export REDIS_HOST="localhost"
+  export REDIS_PORT="6379"
+fi
 
-# ─── 6. Wipe .next ─────────────────────────────────────────────────────
+# ─── 3. Decide if we need local infra ──────────────────────────────────
+needs_local_pg=0
+needs_local_redis=0
+case "$DATABASE_URL" in
+  *localhost*|*127.0.0.1*) needs_local_pg=1 ;;
+esac
+if [ -z "${REDIS_URL:-}" ] || echo "$REDIS_URL" | grep -qE "localhost|127\.0\.0\.1"; then
+  needs_local_redis=1
+fi
+
+# ─── 4. Start local infra if required ──────────────────────────────────
+start_local_infra=0
+[ "$needs_local_pg" = "1" ] && ! ss -tln 2>/dev/null | grep -q ":5432" && start_local_infra=1
+[ "$needs_local_redis" = "1" ] && ! ss -tln 2>/dev/null | grep -q ":6379" && start_local_infra=1
+
+if [ "$start_local_infra" = "1" ]; then
+  if command -v docker >/dev/null 2>&1; then
+    echo "[dev] starting local postgres + redis via docker..."
+    (cd "$ROOT" && docker compose -f infra/docker/docker-compose.yml up -d) || \
+      echo "[dev] docker compose failed — ensure your user is in the docker group or run with sudo"
+  else
+    echo "[dev] WARNING: docker not installed and DATABASE_URL/REDIS_URL point to localhost."
+    echo "[dev]          either install docker, or set cloud URLs in .env"
+  fi
+fi
+
+# ─── 5. Connection summary ─────────────────────────────────────────────
+db_host=$(echo "$DATABASE_URL" | sed -E 's|.*@([^/]+)/.*|\1|')
+redis_host="${REDIS_URL:-redis://$REDIS_HOST:$REDIS_PORT}"
+echo "[dev] DB    → $db_host"
+echo "[dev] redis → $redis_host"
+
+# ─── 6. Build API ──────────────────────────────────────────────────────
+# Always wipe dist + tsbuildinfo. Incremental nest builds have shipped stale
+# bundles after schema/module changes; full rebuild is cheap (~6s) and safe.
+echo "[dev] building api..."
+BUILD_LOG="$LOG_DIR/api-build.log"
+if ! (cd "$ROOT/apps/api" && rm -rf dist tsconfig.tsbuildinfo && pnpm exec nest build) >"$BUILD_LOG" 2>&1; then
+  echo "[dev] api build FAILED — see $BUILD_LOG (tail below):"
+  tail -40 "$BUILD_LOG" | sed 's/^/[build] /'
+  exit 1
+fi
+if [ ! -f "$ROOT/apps/api/dist/main.js" ]; then
+  echo "[dev] api build succeeded but dist/main.js missing — see $BUILD_LOG"
+  exit 1
+fi
+
+# ─── 7. Wipe .next ─────────────────────────────────────────────────────
 rm -rf "$ROOT/apps/web/.next"
 
-# ─── 7. Start API + Web in background, prefix their logs ───────────────
+# ─── 8. Start API + Web in background, prefix their logs ───────────────
 : >"$API_LOG"
 : >"$WEB_LOG"
 (cd "$ROOT/apps/api" && node dist/main.js) >"$API_LOG" 2>&1 &
@@ -93,13 +137,12 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Tail both logs with prefixes.
 tail -n +1 -F "$API_LOG" 2>/dev/null | sed -u 's/^/[api] /' &
 TAIL_API=$!
 tail -n +1 -F "$WEB_LOG" 2>/dev/null | sed -u 's/^/[web] /' &
 TAIL_WEB=$!
 
-# ─── 8. Wait for both to be ready, then announce ───────────────────────
+# ─── 9. Wait for both to be ready, then announce ───────────────────────
 echo "[dev] waiting for api on :4000 and web on :3000..."
 for _ in $(seq 1 90); do
   if curl -sf -o /dev/null http://localhost:4000/api/health 2>/dev/null \
@@ -114,6 +157,5 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 
-# Block on either child exiting (or Ctrl-C).
 wait -n $API_PID $WEB_PID 2>/dev/null || true
 cleanup
