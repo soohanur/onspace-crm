@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { Suspense, useMemo } from 'react';
+import { Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
@@ -76,15 +76,6 @@ function Body() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
-
-  const today = useMemo(() => {
-    return new Date().toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  }, []);
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-6 space-y-4">
@@ -189,7 +180,11 @@ function StatCard({
         {label}
       </div>
       <div className="text-h2 font-mono font-tabular mt-1">
-        {value === undefined ? '—' : value.toLocaleString()}
+        {value === undefined ? (
+          <span className="inline-block w-10 h-5 rounded bg-border/40 animate-pulse" />
+        ) : (
+          value.toLocaleString()
+        )}
       </div>
     </Card>
   );
@@ -229,9 +224,7 @@ function FollowUpsPanel() {
           </span>
         </div>
         {overdueItems.length === 0 ? (
-          <div className="text-caption text-ink-muted py-1">
-            Nothing overdue — keep it up.
-          </div>
+          <div className="text-caption text-ink-muted py-1">Nothing overdue</div>
         ) : (
           <ul className="space-y-1">
             {overdueItems.map((t) => (
@@ -257,9 +250,7 @@ function FollowUpsPanel() {
           </span>
         </div>
         {todayItems.length === 0 ? (
-          <div className="text-caption text-ink-muted py-1">
-            No tasks due today — clear pipeline.
-          </div>
+          <div className="text-caption text-ink-muted py-1">Nothing due today</div>
         ) : (
           <ul className="space-y-1">
             {todayItems.map((t) => (
@@ -343,9 +334,7 @@ function StageFunnelPanel({
       />
 
       {total === 0 ? (
-        <div className="text-bodysm text-ink-muted py-3">
-          No leads yet — kick off a scrape from the Lead Scraper page.
-        </div>
+        <div className="text-bodysm text-ink-muted py-3">No leads yet</div>
       ) : (
         <ul className="space-y-1.5">
           {rows.map((r) => (
@@ -407,9 +396,7 @@ function UpcomingMeetingsPanel({
       />
 
       {items.length === 0 ? (
-        <div className="text-bodysm text-ink-muted py-3">
-          No meetings in the near future.
-        </div>
+        <div className="text-bodysm text-ink-muted py-3">No upcoming meetings</div>
       ) : (
         <ul className="divide-y divide-border -mx-1">
           {items.map((m) => (
@@ -553,9 +540,7 @@ function ActiveCampaignsPanel({
       />
 
       {items.length === 0 ? (
-        <div className="text-bodysm text-ink-muted py-3">
-          No active campaigns.
-        </div>
+        <div className="text-bodysm text-ink-muted py-3">No active campaigns</div>
       ) : (
         <ul className="space-y-3">
           {items.map((c) => (
@@ -646,9 +631,7 @@ function FollowUpContextsPanel({
       />
 
       {items.length === 0 ? (
-        <div className="text-bodysm text-ink-muted py-3">
-          No open follow-ups grouped by context.
-        </div>
+        <div className="text-bodysm text-ink-muted py-3">No open follow-ups</div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {items.map((r) => (
@@ -691,9 +674,7 @@ function ActivityPanel({
       {loading ? (
         <div className="text-bodysm text-ink-muted py-3">Loading…</div>
       ) : !events || events.length === 0 ? (
-        <div className="text-bodysm text-ink-muted py-3">
-          Nothing's happened yet in the last 7 days — get scraping or sending.
-        </div>
+        <div className="text-bodysm text-ink-muted py-3">No recent activity</div>
       ) : (
         <ul className="divide-y divide-border -mx-1">
           {events.map((e) => (
