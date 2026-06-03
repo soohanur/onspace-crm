@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ScrapeService } from './scrape.service';
 import { CreateScrapeJobBatchDto, CreateScrapeJobDto } from './dto';
 
@@ -29,5 +29,15 @@ export class ScrapeController {
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.scrape.cancel(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: CreateScrapeJobDto) {
+    return this.scrape.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.scrape.remove(id);
   }
 }

@@ -107,6 +107,72 @@ export class ScrapeService {
     });
   }
 
+  /**
+   * Edit a queued scrape job's category/location before it starts. The
+   * BullMQ entry is re-added so the new payload takes effect; running or
+   * finished jobs can't be edited.
+   */
+  async update(id: string, dto: CreateScrapeJobDto) {
+    const job = await this.findOne(id);
+    if (job.status !== 'queued') {
+      throw new BadRequestException(
+        `cannot edit a ${job.status} job — only queued jobs are editable`,
+      );
+    }
+    const searchQuery = dto.searchQuery.trim();
+    const searchLocation = dto.searchLocation.trim();
+    if (!searchQuery || !searchLocation) {
+      throw new BadRequestException('searchQuery and searchLocation are required');
+    }
+    const updated = await this.prisma.scrapeJob.update({
+      where: { id },
+      data: { searchQuery, searchLocation },
+    });
+    // Swap the BullMQ entry so the worker reads the new payload when it
+    // picks the job up.
+    try {
+      const bull = await this.queue.getJob(id);
+      if (bull) await bull.remove();
+    } catch {
+      /* noop */
+    }
+    await this.queue.add(
+      'scrape',
+      { jobId: id, searchQuery, searchLocation },
+      {
+        jobId: id,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: 1000,
+        removeOnFail: 1000,
+      },
+    );
+    return updated;
+  }
+
+  /**
+   * Hard-delete a scrape job row. Queued jobs are pulled from BullMQ
+   * first. Running jobs must be cancelled before they can be deleted.
+   */
+  async remove(id: string) {
+    const job = await this.findOne(id);
+    if (job.status === 'running') {
+      throw new BadRequestException(
+        'cancel the job before deleting it (running jobs can\'t be removed mid-flight)',
+      );
+    }
+    if (job.status === 'queued') {
+      try {
+        const bull = await this.queue.getJob(id);
+        if (bull) await bull.remove();
+      } catch {
+        /* noop */
+      }
+    }
+    await this.prisma.scrapeJob.delete({ where: { id } });
+    return { ok: true as const };
+  }
+
   async cancel(id: string) {
     const job = await this.findOne(id);
     if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
