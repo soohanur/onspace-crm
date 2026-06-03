@@ -11,15 +11,12 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { LeadsTable } from '@/components/LeadsTable';
-import { LeadColumnToggle } from '@/components/leads/LeadColumnToggle';
-import { ViewToggle } from '@/components/leads/ViewToggle';
-import { AddToGroupMenu } from '@/components/groups/AddToGroupMenu';
-import { SaveAsSmartGroupButton } from '@/components/groups/SaveAsSmartGroupButton';
+import { LeadsActionsMenu } from '@/components/leads/LeadsActionsMenu';
 import { LeadsFilterModal } from '@/components/leads/LeadsFilterModal';
 import { useLeadsFilter } from '@/hooks/useLeadsFilter';
 import { useColumnPrefs } from '@/hooks/useColumnPrefs';
 import { activeFilterCount, filterToSearchParams } from '@/lib/filters';
-import { Filter, Search, Trash2, X } from 'lucide-react';
+import { Search, Trash2, X } from 'lucide-react';
 
 export default function GlobalLeadsPage() {
   return (
@@ -117,36 +114,23 @@ function GlobalLeadsBody() {
       <Card className="!p-0 overflow-hidden">
         {/* Toolbar */}
         <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2">
-          <CategoryTypeahead
-            value={filter.category ?? ''}
-            onChange={(v) => set('category', v || undefined)}
-            options={facets?.categories ?? []}
-          />
           <div className="relative flex-1 min-w-[200px]">
             <Search
               size={13}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral pointer-events-none"
             />
             <Input
-              placeholder="Search business, city, description…"
+              placeholder="Search…"
               value={filter.q ?? ''}
               onChange={(e) => set('q', e.target.value || undefined)}
               className="!pl-9 !h-9"
             />
           </div>
-          <button
-            onClick={() => setFilterOpen(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-surface text-bodysm text-ink-muted hover:border-primary hover:text-primary"
-          >
-            <Filter size={13} />
-            Filters
-            {modalActive > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-5 px-1 rounded bg-primary text-white text-[10px] font-mono font-tabular">
-                {modalActive}
-              </span>
-            )}
-          </button>
-          <ViewToggle />
+          <CategoryTypeahead
+            value={filter.category ?? ''}
+            onChange={(v) => set('category', v || undefined)}
+            options={facets?.categories ?? []}
+          />
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="text-caption text-ink-muted font-tabular">
               {isLoading ? 'Loading…' : `${items.length} shown`}
@@ -179,12 +163,13 @@ function GlobalLeadsBody() {
                 <Trash2 size={14} /> Delete ({selected.size})
               </Button>
             )}
-            <SaveAsSmartGroupButton filter={filter} />
-            <AddToGroupMenu
+            <LeadsActionsMenu
+              filter={filter}
               selectedIds={Array.from(selected)}
-              onAdded={clearSelection}
+              onClearSelection={clearSelection}
+              onOpenFilters={() => setFilterOpen(true)}
+              filterBadge={modalActive}
             />
-            <LeadColumnToggle />
           </div>
         </div>
 
