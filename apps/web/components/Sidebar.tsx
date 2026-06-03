@@ -29,6 +29,7 @@ const NAV = [
   { href: '/lead-stage', label: 'Lead Stage', icon: GitBranch },
   { href: '/groups', label: 'Lead Groups', icon: FolderKanban },
   { href: '/contacts', label: 'Contacts / Owners', icon: Contact },
+  { href: '/emails', label: 'Inbox', icon: Mail },
   { href: '/campaigns', label: 'Email Campaigns', icon: Mail },
   { href: '/calls', label: 'Call Center', icon: Phone },
   { href: '/meetings', label: 'Meetings', icon: Calendar },
