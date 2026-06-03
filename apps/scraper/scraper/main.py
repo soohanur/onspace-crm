@@ -170,16 +170,11 @@ async def run(args: argparse.Namespace) -> int:
                             dedup_hash=dh,
                         )
 
-                    # PASS 1: save the lead immediately with whatever YP gave us
-                    # (name, phone, address, website, rating, hours, etc). The
-                    # frontend table sees the row appear within a couple of
-                    # seconds — no waiting on the slower website crawl.
-                    if save_now():
-                        saved += 1
-                    emit("saved", totalSaved=saved)
-
-                    # PASS 2: enrich from the business website (slower) and
-                    # update the same row with discovered emails + socials.
+                    # Enrich from the business website to maximize email +
+                    # phone discovery before we decide whether to save. A
+                    # row is committed only if we have at least one phone
+                    # or one email — no-contact leads are worthless for
+                    # outreach and only pollute the table.
                     site_urls = []
                     if listing.website:
                         site_urls.append(listing.website)
@@ -203,13 +198,42 @@ async def run(args: argparse.Namespace) -> int:
                                 if url not in listing.socials:
                                     listing.socials.append(url)
                                     enriched = True
-                            if listing.email and listing.socials:
+                            # Phone numbers harvested from the business
+                            # website (tel: anchors + footer regex) are
+                            # appended to the listing — first one becomes
+                            # the primary if YP didn't give us one.
+                            site_phones = info.get("phones") or []  # type: ignore[union-attr]
+                            for ph in site_phones:
+                                if ph and ph not in listing.phones:
+                                    listing.phones.append(ph)
+                                    enriched = True
+                            if not listing.phone and site_phones:
+                                listing.phone = site_phones[0]  # type: ignore[assignment]
+                                enriched = True
+                            if listing.email and listing.socials and listing.phone:
                                 break
                         except Exception as e:
                             emit("warn", message=f"website harvest failed for {site_url}: {e}")
 
-                    if enriched:
-                        save_now()  # update — same dedup_hash, returns False (not newly inserted)
+                    # Validation: drop rows without a single phone or email
+                    # after the website pass. These are dead-ends for any
+                    # outreach pipeline and just inflate counts.
+                    has_contact = bool(
+                        (listing.email and listing.email.strip())
+                        or (listing.phone and listing.phone.strip())
+                        or any((e or "").strip() for e in (listing.emails or []))
+                        or any((p or "").strip() for p in (listing.phones or []))
+                    )
+                    if not has_contact:
+                        emit(
+                            "info",
+                            message=f"skip no-contact: {listing.business_name}",
+                        )
+                    else:
+                        # Single save call — committed once per listing.
+                        if save_now():
+                            saved += 1
+                        emit("saved", totalSaved=saved)
 
                     try:
                         await detail_ctx.close()

@@ -54,6 +54,11 @@ STUB_HOSTS = (
 )
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+# US phone matcher — tolerates +1, parens, dashes, dots, spaces. Conservative
+# enough to skip random number runs in the page HTML.
+_PHONE_RE = re.compile(
+    r"(?:\+?1[\s\-.])?\(?\b\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}\b"
+)
 _CFEMAIL_RE = re.compile(r'data-cfemail="([0-9a-f]+)"', re.I)
 _HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.I)
 _CONTACTISH_RE = re.compile(r"(?:contact|about|team|staff|get[-_ ]in[-_ ]touch|quote)", re.I)
@@ -159,17 +164,21 @@ def _is_stub(host: str) -> bool:
 # Per-page extraction
 # ──────────────────────────────────────────────────────────────────────────
 
-async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str]]:
-    """Return (emails, social_urls, contactish_links) found on the current page.
+async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str], set[str]]:
+    """Return (emails, social_urls, contactish_links, phones) found on the
+    current page.
 
     `emails` includes both regex matches in HTML and decoded Cloudflare ones.
     `social_urls` is a flat set of every recognized social profile URL.
     `contactish_links` are absolute URLs to pages with contact/about/team in
     the path — used to drive the next crawl step.
+    `phones` is every `tel:` anchor target + regex hits in footer/contact
+    HTML, normalized lightly (digits + leading + only).
     """
     emails: set[str] = set()
     social_urls: set[str] = set()
     contact_links: set[str] = set()
+    phones: set[str] = set()
 
     # 1. mailto anchors (most reliable)
     try:
@@ -180,6 +189,19 @@ async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str]]:
             em = href[len("mailto:"):].split("?")[0].strip()
             if "@" in em:
                 emails.add(em)
+    except Exception:
+        pass
+
+    # 1b. tel: anchors (highest-trust phone signal)
+    try:
+        for a in await page.query_selector_all('a[href^="tel:"]'):
+            href = await a.get_attribute("href")
+            if not href:
+                continue
+            raw = href[len("tel:"):].split("?")[0].strip()
+            digits = re.sub(r"[^\d+]", "", raw)
+            if len(re.sub(r"\D", "", digits)) >= 10:
+                phones.add(digits)
     except Exception:
         pass
 
@@ -194,13 +216,15 @@ async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str]]:
     except Exception:
         pass
 
-    # 3. Footer scan first (most businesses put email there)
+    # 3. Footer scan first (most businesses put email + phone there)
     try:
         footer = await page.query_selector("footer, .footer, #footer, [class*='Footer'], [id*='footer']")
         if footer:
             footer_text = await footer.inner_text()
             for m in _EMAIL_RE.finditer(footer_text):
                 emails.add(m.group(0))
+            for m in _PHONE_RE.finditer(footer_text):
+                phones.add(m.group(0).strip())
             footer_html = await footer.evaluate("e => e.outerHTML")
             for m in _CFEMAIL_RE.finditer(footer_html):
                 dec = decode_cfemail(m.group(1))
@@ -239,7 +263,7 @@ async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str]]:
                 continue
             contact_links.add(abs_url)
 
-    return emails, social_urls, contact_links
+    return emails, social_urls, contact_links, phones
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -263,6 +287,7 @@ async def harvest_from_website(
 
     emails: set[str] = set()
     socials: set[str] = set()
+    phones: set[str] = set()
     visited: set[str] = set()
 
     async def visit(url: str) -> set[str]:
@@ -279,9 +304,10 @@ async def harvest_from_website(
                 await page.wait_for_load_state("networkidle", timeout=4_000)
             except PWTimeout:
                 pass
-            page_emails, page_socials, page_links = await _extract_page(page)
+            page_emails, page_socials, page_links, page_phones = await _extract_page(page)
             emails.update(page_emails)
             socials.update(page_socials)
+            phones.update(page_phones)
             return page_links
         except Exception:
             return set()
@@ -318,6 +344,7 @@ async def harvest_from_website(
     out["email"] = filtered[0] if filtered else None
     out["all_emails"] = filtered
     out["socials"] = sorted(socials)
+    out["phones"] = sorted(phones)
     return out
 
 
