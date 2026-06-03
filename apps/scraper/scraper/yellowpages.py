@@ -224,15 +224,37 @@ def social_query_selector() -> str:
 # ──────────────────────────────────────────────────────────────────────────
 
 async def parse_search_page(page: Page) -> list[YPListing]:
+    # Broadened: YP shifts class names across A/B variants. Wait for the
+    # union of every variant we've seen + every "no-results" indicator so
+    # a layout change doesn't make us think a page is empty.
+    wait_selector = (
+        "div.search-results.organic div.result, "
+        "div.search-results div.result, "
+        "div.organic div.result, "
+        "article.result, "
+        "div.scrollable-pane div.result, "
+        "div.no-results, h1.no-results-title"
+    )
     try:
-        await page.wait_for_selector(
-            "div.search-results.organic div.result, div.no-results, h1.no-results-title",
-            timeout=15_000,
-        )
+        await page.wait_for_selector(wait_selector, timeout=20_000)
     except PWTimeout:
         return []
 
-    cards = await page.query_selector_all("div.search-results.organic div.result")
+    # Try each card selector in priority order; first one that returns
+    # rows wins. Avoids cases where the broader selector grabs sponsored
+    # tiles alongside organic and breaks downstream parsing.
+    card_selectors = [
+        "div.search-results.organic div.result",
+        "div.search-results div.result",
+        "div.organic div.result",
+        "article.result",
+        "div.scrollable-pane div.result",
+    ]
+    cards = []
+    for sel in card_selectors:
+        cards = await page.query_selector_all(sel)
+        if cards:
+            break
     listings: list[YPListing] = []
     for card in cards:
         async def text(sel: str) -> Optional[str]:
