@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { AuthGate } from './AuthGate';
 
 const CHROMELESS_PATHS = ['/login'];
 
@@ -17,12 +18,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
-        <main className="flex-1 overflow-auto scroll-thin">{children}</main>
+    <AuthGate>
+      <div className="flex h-screen w-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <Topbar />
+          <main className="flex-1 overflow-auto scroll-thin">{children}</main>
+        </div>
       </div>
-    </div>
+    </AuthGate>
   );
 }
