@@ -355,6 +355,45 @@ export interface ThreadMessage {
   error?: string | null;
 }
 
+export interface EmailConversation {
+  leadId: string;
+  businessName: string;
+  email: string | null;
+  logoUrl: string | null;
+  lastAt: string;
+  lastDirection: 'sent' | 'reply';
+  lastSubject: string | null;
+  lastSnippet: string;
+  lastReplyAt: string | null;
+  sentCount: number;
+}
+
+export interface EmailThreadItem {
+  kind: 'sent' | 'reply';
+  id: string;
+  at: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string | null;
+  subject: string | null;
+  snippet: string | null;
+  bodyHtml: string | null;
+  bodyText: string | null;
+  status?: string;
+}
+
+export interface EmailThread {
+  lead: {
+    id: string;
+    businessName: string;
+    email: string | null;
+    logoUrl: string | null;
+    city: string | null;
+    state: string | null;
+  };
+  items: EmailThreadItem[];
+}
+
 export interface EmailLog {
   id: string;
   leadId: string;
@@ -1479,6 +1518,12 @@ export const api = {
 
   listEmailHistory: (leadId: string) =>
     request<EmailLog[]>(`/leads/${leadId}/emails`),
+
+  listEmailConversations: () =>
+    request<EmailConversation[]>('/email/conversations'),
+
+  getEmailThread: (leadId: string) =>
+    request<EmailThread>(`/email/conversations/${leadId}/thread`),
 
   getEmail: (id: string) => request<EmailLog>(`/email/logs/${id}`),
 

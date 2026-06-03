@@ -65,6 +65,18 @@ export class EmailController {
     return this.emails.listForLead(leadId, take ? Number(take) : undefined);
   }
 
+  /** Chat-style conversation list for the /emails inbox: one row per lead. */
+  @Get('email/conversations')
+  conversations() {
+    return this.emails.conversations();
+  }
+
+  /** Time-ordered timeline of sent + reply messages for one lead. */
+  @Get('email/conversations/:leadId/thread')
+  thread(@Param('leadId') leadId: string) {
+    return this.emails.thread(leadId);
+  }
+
   /** Full detail of one email log. */
   @Get('email/logs/:id')
   one(@Param('id') id: string) {

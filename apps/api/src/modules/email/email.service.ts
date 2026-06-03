@@ -664,6 +664,158 @@ export class EmailService {
     const px = `<img src="${base}/api/email/track/${trackingId}.gif" alt="" width="1" height="1" style="display:block;border:0;outline:none;width:1px;height:1px" />`;
     return `${html}\n${px}`;
   }
+
+  /**
+   * One row per lead that has at least one email log. Aggregates the
+   * latest sent + latest reply so the /emails inbox can render a
+   * chat-style conversation list (latest first, unread at top driven
+   * by the client's localStorage seen-cursor).
+   */
+  async conversations() {
+    const leads = await this.prisma.lead.findMany({
+      where: { emailLogs: { some: {} } },
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        logoUrl: true,
+        emailLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            subject: true,
+            sentAt: true,
+            createdAt: true,
+            bodyText: true,
+            replies: {
+              orderBy: { receivedAt: 'desc' },
+              take: 1,
+              select: {
+                id: true,
+                receivedAt: true,
+                fromEmail: true,
+                snippet: true,
+              },
+            },
+          },
+        },
+        _count: { select: { emailLogs: true } },
+      },
+    });
+
+    type Row = {
+      leadId: string;
+      businessName: string;
+      email: string | null;
+      logoUrl: string | null;
+      lastAt: string;
+      lastDirection: 'sent' | 'reply';
+      lastSubject: string | null;
+      lastSnippet: string;
+      lastReplyAt: string | null;
+      sentCount: number;
+    };
+    const rows: Row[] = [];
+    for (const l of leads) {
+      const lastLog = l.emailLogs[0];
+      if (!lastLog) continue;
+      const lastReply = lastLog.replies[0];
+      const sentAt = lastLog.sentAt ?? lastLog.createdAt;
+      const replyAt = lastReply?.receivedAt ?? null;
+      const replyNewer =
+        !!replyAt && new Date(replyAt).getTime() > new Date(sentAt).getTime();
+      const lastAt = replyNewer ? (replyAt as Date) : sentAt;
+      const snippetSource = replyNewer
+        ? lastReply?.snippet ?? lastLog.subject ?? ''
+        : lastLog.bodyText ?? lastLog.subject ?? '';
+      rows.push({
+        leadId: l.id,
+        businessName: l.businessName,
+        email: l.email,
+        logoUrl: l.logoUrl,
+        lastAt: lastAt.toISOString(),
+        lastDirection: replyNewer ? 'reply' : 'sent',
+        lastSubject: lastLog.subject ?? null,
+        lastSnippet: snippetSource.slice(0, 160),
+        lastReplyAt: replyAt ? new Date(replyAt).toISOString() : null,
+        sentCount: l._count.emailLogs,
+      });
+    }
+    rows.sort((a, b) => (a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : 0));
+    return rows;
+  }
+
+  /**
+   * Flat time-ordered timeline of every sent EmailLog + EmailReply for a
+   * lead. Used by the /emails thread pane to render a chat transcript.
+   */
+  async thread(leadId: string) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        logoUrl: true,
+        city: true,
+        state: true,
+      },
+    });
+    if (!lead) throw new NotFoundException('Lead not found');
+
+    const logs = await this.prisma.emailLog.findMany({
+      where: { leadId },
+      orderBy: { createdAt: 'asc' },
+      include: { replies: { orderBy: { receivedAt: 'asc' } } },
+    });
+
+    type Item = {
+      kind: 'sent' | 'reply';
+      id: string;
+      at: string;
+      fromEmail: string;
+      fromName: string | null;
+      toEmail: string | null;
+      subject: string | null;
+      snippet: string | null;
+      bodyHtml: string | null;
+      bodyText: string | null;
+      status?: string;
+    };
+    const items: Item[] = [];
+    for (const log of logs) {
+      items.push({
+        kind: 'sent',
+        id: log.id,
+        at: (log.sentAt ?? log.createdAt).toISOString(),
+        fromEmail: log.fromEmail,
+        fromName: log.fromName,
+        toEmail: log.toEmail,
+        subject: log.subject,
+        snippet: log.bodyText ? log.bodyText.slice(0, 160) : null,
+        bodyHtml: log.bodyHtml,
+        bodyText: log.bodyText,
+        status: log.status,
+      });
+      for (const r of log.replies ?? []) {
+        items.push({
+          kind: 'reply',
+          id: r.id,
+          at: r.receivedAt.toISOString(),
+          fromEmail: r.fromEmail,
+          fromName: r.fromName,
+          toEmail: r.toEmail,
+          subject: r.subject,
+          snippet: r.snippet,
+          bodyHtml: r.bodyHtml,
+          bodyText: r.bodyText,
+        });
+      }
+    }
+    items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return { lead, items };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
