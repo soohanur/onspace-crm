@@ -55,6 +55,10 @@ export function LeadsTable({
   onToggleSelect,
   onToggleAll,
   onDelete,
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
+  fillHeight,
 }: {
   leads: Lead[];
   visibleColumns?: Set<ColumnKey>;
@@ -64,6 +68,13 @@ export function LeadsTable({
   onToggleAll?: () => void;
   /** Called with the lead's id when the user confirms the row's delete action. */
   onDelete?: (id: string) => void;
+  /** True if more pages exist; renders a sentinel row that calls onLoadMore. */
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  /** Fires when the bottom sentinel scrolls into view. */
+  onLoadMore?: () => void;
+  /** Make the scroll container fill its flex parent (for viewport-fill page layout). */
+  fillHeight?: boolean;
 }) {
   const qc = useQueryClient();
   const newIds = useNewIds(leads);
@@ -95,16 +106,42 @@ export function LeadsTable({
     },
   });
 
+  // Bottom sentinel: when it intersects the scroll viewport, fetch the
+  // next page. Lets the table grow on scroll instead of doing one big
+  // initial fetch.
+  const sentinelRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    if (!onLoadMore || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && !isFetchingMore) onLoadMore();
+        }
+      },
+      { rootMargin: '300px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onLoadMore, hasMore, isFetchingMore, leads.length]);
+
   if (leads.length === 0) {
     return (
       <div className="py-20 text-center text-ink-muted text-bodysm">
-        No leads yet — kick off a scrape from the Lead Scraper page.
+        No leads
       </div>
     );
   }
 
   return (
-    <div className="overflow-auto scroll-thin">
+    <div
+      className={
+        fillHeight
+          ? 'flex-1 min-h-0 overflow-auto scroll-thin'
+          : 'overflow-auto scroll-thin'
+      }
+    >
       <table className="min-w-[1500px] w-full text-bodysm">
         <thead className="bg-background sticky top-0 z-10">
           <tr className="text-caption uppercase tracking-[0.06em] text-neutral text-left">
@@ -123,6 +160,7 @@ export function LeadsTable({
                 />
               </Th>
             )}
+            <Th align="right">#</Th>
             {isVisible('business') && <Th>Business</Th>}
             {isVisible('stage') && <Th>Stage</Th>}
             {isVisible('category') && <Th>Category</Th>}
@@ -144,7 +182,7 @@ export function LeadsTable({
           </tr>
         </thead>
         <tbody>
-          {leads.map((l) => (
+          {leads.map((l, i) => (
             <tr
               key={l.id}
               className={
@@ -163,6 +201,11 @@ export function LeadsTable({
                   />
                 </Td>
               )}
+              <Td>
+                <span className="text-caption text-neutral font-mono font-tabular">
+                  {i + 1}
+                </span>
+              </Td>
               {isVisible('business') && (
                 <Td>
                   <div className="flex items-center gap-2 max-w-[280px]">
@@ -450,6 +493,16 @@ export function LeadsTable({
               )}
             </tr>
           ))}
+          {hasMore && (
+            <tr ref={sentinelRef} aria-hidden>
+              <td
+                colSpan={50}
+                className="text-center py-3 text-caption text-ink-muted"
+              >
+                {isFetchingMore ? 'Loading…' : ' '}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 

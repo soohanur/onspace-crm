@@ -4,8 +4,13 @@
 // for prerender — wrap the body and force-dynamic the route.
 export const dynamic = 'force-dynamic';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -39,28 +44,42 @@ function GlobalLeadsBody() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const filterParams = Object.fromEntries(
-    filterToSearchParams(filter).entries(),
+  const filterParams = useMemo(
+    () => Object.fromEntries(filterToSearchParams(filter).entries()),
+    [filter],
   );
+  const filterKey = useMemo(() => JSON.stringify(filterParams), [filterParams]);
 
   const { data: stats } = useQuery({
-    queryKey: ['leads-stats-global', filterParams],
+    queryKey: ['leads-stats-global', filterKey],
     queryFn: () => api.leadStats(filterParams),
-    refetchInterval: 3_000,
+    refetchInterval: 10_000,
   });
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['leads-global', filterParams],
-    queryFn: () => api.listLeads({ ...filterParams, take: 200 }),
-    refetchInterval: 3_000,
+  // Infinite scroll — load a page at a time, append on intersection at
+  // the table-bottom sentinel. PAGE_SIZE=50 keeps each fetch fast.
+  const PAGE_SIZE = 50;
+  const list = useInfiniteQuery({
+    queryKey: ['leads-global', filterKey],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api.listLeads({
+        ...filterParams,
+        take: PAGE_SIZE,
+        cursor: pageParam ?? undefined,
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
   });
+  const isLoading = list.isLoading;
+  const items = useMemo(
+    () => list.data?.pages.flatMap((p) => p.items) ?? [],
+    [list.data?.pages],
+  );
 
   const { data: facets } = useQuery({
     queryKey: ['facets'],
     queryFn: api.facets,
   });
-
-  const items = data?.items ?? [];
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['leads-global'] });
@@ -102,8 +121,8 @@ function GlobalLeadsBody() {
   const modalActive = Math.max(0, totalActive - inlineActive);
 
   return (
-    <div className="max-w-[1700px] mx-auto px-6 py-6 space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="h-full flex flex-col max-w-[1700px] mx-auto w-full px-6 py-4 gap-3 min-h-0">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
         <StatCard label="Total" value={stats?.total ?? 0} />
         <StatCard label="With Website" value={stats?.withWebsite ?? 0} />
         <StatCard label="With Email" value={stats?.withEmail ?? 0} />
@@ -111,9 +130,9 @@ function GlobalLeadsBody() {
         <StatCard label="With Social" value={stats?.withSocials ?? 0} />
       </div>
 
-      <Card className="!p-0 overflow-hidden">
+      <Card className="!p-0 overflow-hidden flex-1 min-h-0 flex flex-col">
         {/* Toolbar */}
-        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2">
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0">
           <div className="relative flex-1 min-w-[200px]">
             <Search
               size={13}
@@ -181,6 +200,10 @@ function GlobalLeadsBody() {
           onToggleSelect={toggleSelect}
           onToggleAll={toggleAll}
           onDelete={(id) => deleteOne.mutate(id)}
+          fillHeight
+          hasMore={list.hasNextPage}
+          isFetchingMore={list.isFetchingNextPage}
+          onLoadMore={() => list.fetchNextPage()}
         />
       </Card>
 
