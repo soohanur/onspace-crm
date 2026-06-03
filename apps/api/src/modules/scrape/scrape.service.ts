@@ -46,7 +46,13 @@ export class ScrapeService {
       },
       {
         jobId: job.id,
-        attempts: 1,
+        // Up to 5 attempts with exponential backoff (30s, 1m, 2m, 4m).
+        // Each retry resumes from `scrape_jobs.last_page + 1` so the
+        // crawl never re-walks pages it already saved. A scrape that
+        // hits a permanent error (e.g. YP blocks an IP for hours) will
+        // still fail after the 5th try and surface the error.
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: 1000,
         removeOnFail: 1000,
       },
