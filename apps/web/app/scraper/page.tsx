@@ -10,7 +10,8 @@ import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Autocomplete } from '@/components/Autocomplete';
 import { LeadsTable } from '@/components/LeadsTable';
-import { Layers, Loader2, Play, Square } from 'lucide-react';
+import { ScrapePipelinePanel } from '@/components/scraper/ScrapePipelinePanel';
+import { Loader2, Play, Square } from 'lucide-react';
 
 // Set NEXT_PUBLIC_SCRAPER_DISABLED=1 on hosts that can't run the Python
 // Playwright subprocess (e.g. Render free instances). Page still renders;
@@ -66,33 +67,8 @@ export default function LeadScraperPage() {
     },
   });
 
-  // Bulk pipeline: paste many categories + many locations, queue the
-  // cartesian product. Concurrency=1 on the worker walks them in order.
-  const [bulkCategories, setBulkCategories] = useState('');
-  const [bulkLocations, setBulkLocations] = useState('');
-  const parseList = (s: string) =>
-    Array.from(
-      new Set(s.split(/\r?\n|,/).map((x) => x.trim()).filter(Boolean)),
-    );
-  const bulkCats = parseList(bulkCategories);
-  const bulkLocs = parseList(bulkLocations);
-  const bulkCount = bulkCats.length * bulkLocs.length;
-  const bulkCreate = useMutation({
-    mutationFn: () =>
-      api.createScrapeJobsBatch({
-        searchQueries: bulkCats,
-        searchLocations: bulkLocs,
-      }),
-    onSuccess: (res) => {
-      setBulkCategories('');
-      setBulkLocations('');
-      // Surface the FIRST queued job as the active monitor so the user can
-      // watch the pipeline progress; the others stream in via the global
-      // /scrape-jobs list.
-      if (res.jobs[0]?.id) setActiveJobId(res.jobs[0].id);
-      qc.invalidateQueries({ queryKey: ['scrape-jobs'] });
-    },
-  });
+  // Bulk pipeline moved to a dedicated component (ScrapePipelinePanel)
+  // — handles add, edit, delete, requeue inline.
 
   const { data: job } = useQuery<ScrapeJob | undefined>({
     queryKey: ['scrape-job', activeJobId],
@@ -229,81 +205,11 @@ export default function LeadScraperPage() {
         )}
       </Card>
 
-      {/* Bulk pipeline */}
-      <Card>
-        <div className="flex items-center gap-2 mb-3">
-          <Layers size={16} className="text-primary" />
-          <h2 className="text-h3">Bulk pipeline</h2>
-          <span className="text-caption text-ink-muted">
-            queue many categories × locations — runs strictly in order
-          </span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
-              Categories ({bulkCats.length})
-            </label>
-            <textarea
-              value={bulkCategories}
-              onChange={(e) => setBulkCategories(e.target.value)}
-              placeholder={'plumber\ndentist\nroofing\nelectrician'}
-              rows={6}
-              className="w-full text-bodysm rounded-md border border-border bg-surface p-3 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-            />
-            <div className="mt-1 text-caption text-ink-muted">
-              One per line, or comma-separated.
-            </div>
-          </div>
-          <div>
-            <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
-              Locations ({bulkLocs.length})
-            </label>
-            <textarea
-              value={bulkLocations}
-              onChange={(e) => setBulkLocations(e.target.value)}
-              placeholder={'Los Angeles, CA\nNew York, NY\nDallas, TX'}
-              rows={6}
-              className="w-full text-bodysm rounded-md border border-border bg-surface p-3 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-            />
-            <div className="mt-1 text-caption text-ink-muted">
-              One per line, or comma-separated.
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 flex items-center justify-between flex-wrap gap-3">
-          <div className="text-bodysm">
-            Will queue{' '}
-            <span className="font-medium text-ink">{bulkCount.toLocaleString()}</span>{' '}
-            job{bulkCount === 1 ? '' : 's'} (
-            {bulkCats.length} × {bulkLocs.length}).
-          </div>
-          <Button
-            onClick={() => bulkCreate.mutate()}
-            disabled={
-              SCRAPER_DISABLED ||
-              bulkCount === 0 ||
-              bulkCount > 200 * 200 ||
-              bulkCreate.isPending
-            }
-          >
-            {bulkCreate.isPending ? (
-              <>
-                <Loader2 size={14} className="animate-spin" /> Queueing…
-              </>
-            ) : (
-              <>
-                <Layers size={14} /> Queue {bulkCount || ''} job
-                {bulkCount === 1 ? '' : 's'}
-              </>
-            )}
-          </Button>
-        </div>
-        {bulkCreate.error && (
-          <div className="mt-3 text-error text-bodysm">
-            {(bulkCreate.error as Error).message}
-          </div>
-        )}
-      </Card>
+      {/* Pipeline workspace: bulk add + live table of every job */}
+      <ScrapePipelinePanel
+        disabled={SCRAPER_DISABLED}
+        onSelectJob={(id) => setActiveJobId(id)}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

@@ -26,6 +26,10 @@ export interface ScrapeJob {
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   totalFound: number;
   totalSaved: number;
+  /** Last search-result page Python finished. Resume cursor. */
+  lastPage: number;
+  pagesScanned: number;
+  exhausted: boolean;
   error: string | null;
   startedAt: string | null;
   finishedAt: string | null;
