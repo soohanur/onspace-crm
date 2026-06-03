@@ -44,13 +44,28 @@ export class ScrapeProcessor extends WorkerHost {
   async process(job: Job<ScrapeJobPayload>) {
     const { jobId, searchQuery, searchLocation } = job.data;
 
+    // Resume support: if the job already walked some pages on a previous
+    // attempt (BullMQ retry, manual replay), start at lastPage + 1.
+    const existing = await this.prisma.scrapeJob.findUnique({
+      where: { id: jobId },
+      select: { lastPage: true, exhausted: true },
+    });
+    if (existing?.exhausted) {
+      this.log.log(`scrape ${jobId} already exhausted — skipping`);
+      return { ok: true, exhausted: true };
+    }
+    const startPage = (existing?.lastPage ?? 0) + 1;
+    if (startPage > 1) {
+      this.log.log(`scrape ${jobId} resuming at page ${startPage}`);
+    }
+
     await this.prisma.scrapeJob.update({
       where: { id: jobId },
-      data: { status: 'running', startedAt: new Date() },
+      data: { status: 'running', startedAt: new Date(), error: null },
     });
 
     try {
-      await this.runPython({ jobId, searchQuery, searchLocation });
+      await this.runPython({ jobId, searchQuery, searchLocation, startPage });
 
       const totalSaved = await this.prisma.lead.count({ where: { jobId } });
       // If ScrapeService marked the job 'cancelled' (via SIGTERM), preserve that.
@@ -89,7 +104,7 @@ export class ScrapeProcessor extends WorkerHost {
     }
   }
 
-  private runPython(args: ScrapeJobPayload): Promise<void> {
+  private runPython(args: ScrapeJobPayload & { startPage: number }): Promise<void> {
     // dist/modules/scrape/ → apps/api/dist/modules/scrape  → up 4 to apps/  → /scraper
     const scraperRoot = path.resolve(
       __dirname,
@@ -109,6 +124,8 @@ export class ScrapeProcessor extends WorkerHost {
       args.searchQuery,
       '--location',
       args.searchLocation,
+      '--start-page',
+      String(args.startPage),
     ];
 
     return new Promise((resolve, reject) => {
@@ -162,6 +179,23 @@ export class ScrapeProcessor extends WorkerHost {
       await this.prisma.scrapeJob.update({
         where: { id: jobId },
         data: { totalSaved: evt.totalSaved },
+      });
+    } else if (evt.type === 'page_done' && typeof evt.page === 'number') {
+      // Persist the last fully-committed search-result page so a retry
+      // never re-walks pages we already harvested.
+      await this.prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: {
+          lastPage: evt.page,
+          pagesScanned: { increment: 1 },
+        },
+      });
+    } else if (evt.type === 'exhausted') {
+      // Python walked past the end of the search results — no retry should
+      // ever re-run this query unless someone resets the flag.
+      await this.prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: { exhausted: true },
       });
     } else if (evt.type === 'warn' && typeof evt.message === 'string') {
       this.log.warn(`[scraper:${jobId}] ${evt.message}`);
