@@ -23,7 +23,7 @@ import traceback
 
 from playwright.async_api import async_playwright
 
-from .db import get_conn, upsert_lead
+from .db import get_conn, lead_exists, upsert_lead
 from .dedup import dedup_hash, normalize_phone
 from .event import emit
 from .website import harvest_from_website, guess_owner_linkedin_search_url
@@ -38,7 +38,9 @@ from .yellowpages import (
 )
 
 
-HARD_PAGE_LIMIT = 100  # safety: YP rarely shows more than ~50 pages
+# Hard ceiling so a buggy YP pagination loop can't spin forever. 10k pages
+# at ~30 listings/page = 300k results — far past any real category.
+HARD_PAGE_LIMIT = 10_000
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -61,24 +63,46 @@ async def run(args: argparse.Namespace) -> int:
         try:
             search_page = await search_ctx.new_page()
 
-            page_n = 1
+            page_n = max(1, int(getattr(args, "start_page", 1) or 1))
+            if page_n > 1:
+                emit("info", message=f"resuming at page {page_n}")
             while page_n <= HARD_PAGE_LIMIT:
                 url = search_url(args.query, args.location, page_n)
                 emit("info", message=f"page {page_n}: {url}")
                 try:
                     await goto(search_page, url)
                 except Exception as e:
+                    # Re-raise so the BullMQ worker sees a failure and the
+                    # retry kicks in from the next page (last_page stays at
+                    # page_n - 1 — committed at end of prior page).
                     emit("warn", message=f"search page {page_n} failed: {e}")
-                    break
+                    raise
 
                 page_listings = await parse_search_page(search_page)
                 if not page_listings:
                     emit("info", message=f"page {page_n} empty — stopping")
+                    emit("exhausted")
                     break
 
                 for listing in page_listings:
                     found += 1
                     emit("progress", totalFound=found)
+
+                    # Pre-fetch dedup: if we already have this YP MIPID or
+                    # detail URL in `leads`, skip the slow detail + website
+                    # crawl entirely. Re-running the same query never
+                    # re-scrapes a company we already harvested.
+                    if lead_exists(
+                        conn,
+                        source="yellowpages",
+                        external_id=listing.external_id,
+                        source_url=listing.detail_url,
+                    ):
+                        emit(
+                            "info",
+                            message=f"skip already-saved: {listing.business_name}",
+                        )
+                        continue
 
                     # Fresh context per detail page — defeats YP fingerprint.
                     detail_ctx = await make_context(browser)
@@ -194,9 +218,17 @@ async def run(args: argparse.Namespace) -> int:
 
                     await asyncio.sleep(random.uniform(0.4, 1.0))
 
+                # Page fully committed — persist the cursor so a crash on
+                # the NEXT page can resume here.
+                emit("page_done", page=page_n)
+
                 # polite pause between search pages
                 await asyncio.sleep(random.uniform(2.0, 4.5))
                 page_n += 1
+            else:
+                # Hit the safety ceiling. Don't mark exhausted — a retry can
+                # legitimately keep going if the user bumps the cap.
+                emit("warn", message=f"hit HARD_PAGE_LIMIT={HARD_PAGE_LIMIT}")
         finally:
             try:
                 await search_ctx.close()
@@ -217,6 +249,12 @@ def main() -> None:
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--query", required=True)
     parser.add_argument("--location", required=True)
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=1,
+        help="Resume cursor: search page to start from (1-indexed).",
+    )
     args = parser.parse_args()
 
     try:

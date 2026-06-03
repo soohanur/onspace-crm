@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 import psycopg
 from psycopg.rows import dict_row
@@ -122,3 +122,33 @@ def upsert_lead(conn: psycopg.Connection, **lead: Any) -> bool:
         cur.execute(sql, params)
         row = cur.fetchone()
         return bool(row and row.get("inserted"))
+
+
+def lead_exists(
+    conn: psycopg.Connection,
+    *,
+    source: str,
+    external_id: Optional[str],
+    source_url: Optional[str],
+) -> bool:
+    """Pre-fetch dedup check. True if a row already exists keyed on this
+    source's external_id OR source_url. Lets the scraper skip opening
+    detail pages for companies it already harvested. Both keys checked in
+    one query so a single round trip covers either match."""
+    if not external_id and not source_url:
+        return False
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1 FROM leads
+            WHERE source = %s
+              AND (
+                (external_id IS NOT NULL AND external_id = %s)
+                OR
+                (source_url IS NOT NULL AND source_url = %s)
+              )
+            LIMIT 1
+            """,
+            (source, external_id, source_url),
+        )
+        return cur.fetchone() is not None
