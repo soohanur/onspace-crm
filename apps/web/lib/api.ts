@@ -1252,6 +1252,18 @@ export const api = {
   cancelScrapeJob: (id: string) =>
     request<ScrapeJob>(`/scrape-jobs/${id}/cancel`, { method: 'POST' }),
 
+  updateScrapeJob: (
+    id: string,
+    input: { searchQuery: string; searchLocation: string },
+  ) =>
+    request<ScrapeJob>(`/scrape-jobs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteScrapeJob: (id: string) =>
+    request<{ ok: true }>(`/scrape-jobs/${id}`, { method: 'DELETE' }),
+
   getScrapeJob: (id: string) => request<ScrapeJob>(`/scrape-jobs/${id}`),
 
   listScrapeJobs: () => request<ScrapeJob[]>('/scrape-jobs'),
