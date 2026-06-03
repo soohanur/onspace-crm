@@ -160,58 +160,37 @@ export function ScrapePipelinePanel({
       {open && (
         <div className="border-t border-border">
           {/* Add */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
-            <div>
-              <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
-                Categories ({cats.length})
-              </label>
-              <textarea
-                value={bulkCategories}
-                onChange={(e) => setBulkCategories(e.target.value)}
-                placeholder={'plumber\ndentist\nroofing'}
-                rows={4}
-                className="w-full text-bodysm rounded-md border border-border bg-surface p-3 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-caption uppercase tracking-wider text-neutral mb-1.5">
-                Locations ({locs.length})
-              </label>
-              <textarea
-                value={bulkLocations}
-                onChange={(e) => setBulkLocations(e.target.value)}
-                placeholder={'Los Angeles, CA\nNew York, NY'}
-                rows={4}
-                className="w-full text-bodysm rounded-md border border-border bg-surface p-3 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-              />
-            </div>
-          </div>
-          <div className="px-4 pb-3 flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-caption text-ink-muted">
-              Will queue{' '}
-              <span className="font-medium text-ink">
-                {planned.toLocaleString()}
-              </span>{' '}
-              job{planned === 1 ? '' : 's'} ({cats.length} × {locs.length}). One
-              per line or comma-separated.
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 p-3 items-start">
+            <textarea
+              value={bulkCategories}
+              onChange={(e) => setBulkCategories(e.target.value)}
+              placeholder="Categories"
+              rows={2}
+              className="w-full text-bodysm rounded-md border border-border bg-surface p-2 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
+            />
+            <textarea
+              value={bulkLocations}
+              onChange={(e) => setBulkLocations(e.target.value)}
+              placeholder="Locations"
+              rows={2}
+              className="w-full text-bodysm rounded-md border border-border bg-surface p-2 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
+            />
             <Button
               onClick={() => queueBatch.mutate()}
               disabled={disabled || planned === 0 || queueBatch.isPending}
+              className="!h-[60px] !min-w-[120px]"
             >
               {queueBatch.isPending ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> Queueing…
-                </>
+                <Loader2 size={14} className="animate-spin" />
               ) : (
                 <>
-                  <Plus size={14} /> Add to pipeline
+                  <Plus size={14} /> {planned > 0 ? `Add ${planned}` : 'Add'}
                 </>
               )}
             </Button>
           </div>
           {queueBatch.error && (
-            <div className="px-4 pb-3 text-error text-caption">
+            <div className="px-3 pb-2 text-error text-caption">
               {(queueBatch.error as Error).message}
             </div>
           )}

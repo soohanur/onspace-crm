@@ -111,13 +111,7 @@ export default function LeadScraperPage() {
     query.trim().length >= 2 && location.trim().length >= 2 && !startJob.isPending && !isRunning;
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-h1 mb-2">Lead Scraper</h1>
-        <p className="text-ink-muted text-bodysm">
-          Scrape YellowPages by category + location. Results stream in below.
-        </p>
-      </div>
+    <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
 
       {SCRAPER_DISABLED && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -193,10 +187,6 @@ export default function LeadScraperPage() {
               </Button>
             )}
           </div>
-        </div>
-        <div className="mt-3 text-caption text-ink-muted">
-          Scrapes <span className="font-medium text-ink">every business</span> for the
-          category + location until YellowPages stops returning results.
         </div>
         {startJob.error && (
           <div className="mt-3 text-error text-bodysm">
