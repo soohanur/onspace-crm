@@ -140,11 +140,7 @@ function Body() {
           <ArrowLeft size={12} /> Campaigns
         </Link>
       </div>
-      <h1 className="text-h1 mb-1">New campaign</h1>
-      <p className="text-ink-muted text-bodysm mb-6">
-        Pick a group, a template, and an account. We'll resolve recipients
-        and dedupe by email before sending anything.
-      </p>
+      <h1 className="text-h2 mb-4">New campaign</h1>
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-6 text-bodysm">

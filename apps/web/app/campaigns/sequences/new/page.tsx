@@ -169,11 +169,7 @@ function Body() {
         >
           <ArrowLeft size={12} /> All sequences
         </Link>
-        <h1 className="text-h1 mb-1">New sequence</h1>
-        <p className="text-ink-muted text-bodysm">
-          Multi-step drip with stop-on-reply and stop-on-stage-progression
-          guards. Steps fire on a 5-minute tick once started.
-        </p>
+        <h1 className="text-h2 mb-4">New sequence</h1>
       </header>
 
       {/* Progress dots */}

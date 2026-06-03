@@ -69,14 +69,7 @@ function SettingsPageBody() {
   };
 
   return (
-    <div className="max-w-[1000px] mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-h1 mb-1">Settings</h1>
-        <p className="text-ink-muted text-bodysm">
-          Workspace preferences and connected services.
-        </p>
-      </div>
-
+    <div className="max-w-[1000px] mx-auto px-6 py-6 space-y-4">
       {/* Appearance / theme */}
       <AppearanceCard />
 

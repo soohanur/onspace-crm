@@ -38,14 +38,8 @@ export default function GroupsPage() {
   const smart = groups.filter((g) => g.type === 'smart');
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-8">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-h1 mb-2">Lead Groups</h1>
-          <p className="text-ink-muted text-bodysm">
-            Manual groups hold a fixed set of leads. Smart groups re-evaluate a saved filter on every visit.
-          </p>
-        </div>
+    <div className="max-w-[1200px] mx-auto px-6 py-6">
+      <div className="flex items-start justify-end mb-4">
         {!creating && (
           <Button onClick={() => setCreating(true)}>
             <FolderPlus size={14} /> New manual group

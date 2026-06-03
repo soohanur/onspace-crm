@@ -87,12 +87,7 @@ function Body() {
   }, []);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-6 py-8 space-y-6">
-      <header>
-        <h1 className="text-h1 mb-1">Dashboard</h1>
-        <p className="text-ink-muted text-bodysm">Welcome back · {today}</p>
-      </header>
-
+    <div className="max-w-[1280px] mx-auto px-6 py-6 space-y-4">
       <StatGrid summary={summary.data} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
