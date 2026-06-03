@@ -1240,6 +1240,15 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  createScrapeJobsBatch: (input: {
+    searchQueries: string[];
+    searchLocations: string[];
+  }) =>
+    request<{ count: number; jobs: ScrapeJob[] }>('/scrape-jobs/batch', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   cancelScrapeJob: (id: string) =>
     request<ScrapeJob>(`/scrape-jobs/${id}/cancel`, { method: 'POST' }),
 
