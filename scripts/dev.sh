@@ -62,6 +62,18 @@ if [ "${DEV_USE_CLOUD_REDIS:-0}" != "1" ] \
   export REDIS_PORT="6379"
 fi
 
+# Same pattern for the DB: if .env points at a remote pg (Neon etc.) but a
+# local Postgres is already listening on 5432, prefer local. Free Neon
+# branches sleep / get unreachable; local always works. Override with
+# `DEV_USE_CLOUD_DB=1`. Defaults to the same DSN dev.sh would have used.
+LOCAL_DB_URL="postgresql://onspace:onspace@localhost:5432/onspace_crm?schema=public"
+if [ "${DEV_USE_CLOUD_DB:-0}" != "1" ] \
+   && ss -tln 2>/dev/null | grep -q ":5432" \
+   && ! echo "$DATABASE_URL" | grep -qE "localhost|127\.0\.0\.1"; then
+  echo "[dev] overriding DATABASE_URL → $LOCAL_DB_URL (local pg is up; cloud DB may be unreachable)"
+  export DATABASE_URL="$LOCAL_DB_URL"
+fi
+
 # ─── 3. Decide if we need local infra ──────────────────────────────────
 needs_local_pg=0
 needs_local_redis=0
