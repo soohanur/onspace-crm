@@ -19,7 +19,10 @@ import type { ScrapeJobPayload } from './scrape.service';
  * Future: extract to a separate Python worker that consumes a Redis/Kafka
  * topic directly. The DB contract (Lead schema) is what stays stable.
  */
-@Processor(SCRAPE_QUEUE, { concurrency: 2 })
+// concurrency: 1 keeps the pipeline strictly serial — one (category,
+// location) finishes before the next starts. Lets users queue dozens of
+// jobs up front and walk away.
+@Processor(SCRAPE_QUEUE, { concurrency: 1 })
 export class ScrapeProcessor extends WorkerHost {
   private readonly log = new Logger(ScrapeProcessor.name);
   /** jobId → child process. Used by ScrapeService.cancel to send SIGTERM. */
