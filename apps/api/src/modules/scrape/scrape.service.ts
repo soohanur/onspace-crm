@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateScrapeJobDto } from './dto';
+import { CreateScrapeJobBatchDto, CreateScrapeJobDto } from './dto';
 import { SCRAPE_QUEUE } from './scrape.constants';
 import { ScrapeProcessor } from './scrape.processor';
 
@@ -59,6 +59,39 @@ export class ScrapeService {
     );
 
     return job;
+  }
+
+  /**
+   * Bulk-queue jobs as the cartesian product of `searchQueries × searchLocations`.
+   * Returns the list of created jobs in the order they were enqueued — same
+   * order the strict-serial worker will run them.
+   */
+  async createBatch(dto: CreateScrapeJobBatchDto) {
+    const queries = Array.from(
+      new Set(dto.searchQueries.map((q) => q.trim()).filter(Boolean)),
+    );
+    const locations = Array.from(
+      new Set(dto.searchLocations.map((l) => l.trim()).filter(Boolean)),
+    );
+    if (queries.length === 0 || locations.length === 0) {
+      throw new BadRequestException(
+        'searchQueries and searchLocations must each have at least one non-empty value',
+      );
+    }
+    // Hard cap so a runaway textarea paste can't drop 10k rows. 200 × 200
+    // = 40k jobs which is plenty; tighten if abuse shows up.
+    const pairs: { searchQuery: string; searchLocation: string }[] = [];
+    for (const q of queries) {
+      for (const l of locations) pairs.push({ searchQuery: q, searchLocation: l });
+    }
+
+    const jobs = [];
+    for (const p of pairs) {
+      // Reuse the single-job path so behaviour stays in lockstep — same
+      // retry policy, same job id, same UI.
+      jobs.push(await this.create(p));
+    }
+    return { count: jobs.length, jobs };
   }
 
   async findOne(id: string) {

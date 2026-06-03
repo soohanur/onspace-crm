@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ScrapeService } from './scrape.service';
-import { CreateScrapeJobDto } from './dto';
+import { CreateScrapeJobBatchDto, CreateScrapeJobDto } from './dto';
 
 @Controller('scrape-jobs')
 export class ScrapeController {
@@ -9,6 +9,11 @@ export class ScrapeController {
   @Post()
   create(@Body() dto: CreateScrapeJobDto) {
     return this.scrape.create(dto);
+  }
+
+  @Post('batch')
+  createBatch(@Body() dto: CreateScrapeJobBatchDto) {
+    return this.scrape.createBatch(dto);
   }
 
   @Get()
