@@ -177,6 +177,14 @@ model ScrapeJob {
   status         ScrapeJobStatus @default(queued)
   totalFound     Int             @default(0) @map("total_found")
   totalSaved     Int             @default(0) @map("total_saved")
+  /// Last search-result page Python finished + persisted. Resume picks
+  /// up at `lastPage + 1` on retry/restart so a crash mid-run never
+  /// re-walks the pages it already saved.
+  lastPage       Int             @default(0) @map("last_page")
+  pagesScanned   Int             @default(0) @map("pages_scanned")
+  /// Set when the scrape walked off the end of the search results (an
+  /// empty page came back). Resume should not retry once true.
+  exhausted      Boolean         @default(false)
   error          String?
   startedAt      DateTime?       @map("started_at")
   finishedAt     DateTime?       @map("finished_at")
@@ -287,6 +295,13 @@ model Lead {
   stageHistory        LeadStageHistory[]
 
   @@unique([source, dedupHash])
+  // Primary scrape-dedup keys. external_id = YellowPages MIPID (stable per
+  // business); source_url = listing detail URL. A pre-fetch SELECT against
+  // either lets the scraper skip companies it already saved without
+  // opening their detail page. Nullable columns: Postgres treats each
+  // NULL as distinct so legacy rows without these keys don't collide.
+  @@unique([source, externalId])
+  @@unique([sourceUrl])
   @@index([searchQuery, searchLocation])
   @@index([city, state])
   @@index([website])
