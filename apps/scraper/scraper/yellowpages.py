@@ -97,6 +97,41 @@ def search_url(query: str, location: str, page: int) -> str:
     return f"{YP_BASE}/search?{qs}"
 
 
+async def get_next_search_url(page: Page) -> Optional[str]:
+    """Return absolute URL of YP's "Next" pagination link on the current
+    search-results page, or None if none is rendered. Trying multiple
+    selectors because YP A/B-tests pagination markup."""
+    selectors = [
+        "a.next.ajax-page",
+        "a.next",
+        "a[rel='next']",
+        ".pagination a.next",
+        ".pagination li.next a",
+        ".pagination a[aria-label='Next']",
+        "[data-impression-trigger='pagination-next-page'] a",
+        "[class*='pagination'] a[href*='page=']",
+    ]
+    for sel in selectors:
+        try:
+            el = await page.query_selector(sel)
+        except Exception:
+            continue
+        if not el:
+            continue
+        try:
+            href = await el.get_attribute("href")
+        except Exception:
+            href = None
+        if not href:
+            continue
+        if href.startswith("http"):
+            return href
+        if href.startswith("/"):
+            return YP_BASE + href
+        return YP_BASE + "/" + href
+    return None
+
+
 _USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",

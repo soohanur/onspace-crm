@@ -29,6 +29,7 @@ from .event import emit
 from .website import harvest_from_website, guess_owner_linkedin_search_url
 from .yellowpages import (
     enrich_from_detail,
+    get_next_search_url,
     listing_to_dict,
     make_browser,
     make_context,
@@ -66,15 +67,15 @@ async def run(args: argparse.Namespace) -> int:
             page_n = max(1, int(getattr(args, "start_page", 1) or 1))
             if page_n > 1:
                 emit("info", message=f"resuming at page {page_n}")
+            # First-page URL is constructed; from page 2 on we follow YP's
+            # actual "Next" pagination link, which is more reliable than
+            # guessing query-string variants the site might A/B-test.
+            target_url = search_url(args.query, args.location, page_n)
             while page_n <= HARD_PAGE_LIMIT:
-                url = search_url(args.query, args.location, page_n)
-                emit("info", message=f"page {page_n}: {url}")
+                emit("info", message=f"page {page_n}: {target_url}")
                 try:
-                    await goto(search_page, url)
+                    await goto(search_page, target_url)
                 except Exception as e:
-                    # Re-raise so the BullMQ worker sees a failure and the
-                    # retry kicks in from the next page (last_page stays at
-                    # page_n - 1 — committed at end of prior page).
                     emit("warn", message=f"search page {page_n} failed: {e}")
                     raise
 
@@ -84,7 +85,32 @@ async def run(args: argparse.Namespace) -> int:
                     message=f"page {page_n}: parsed {len(page_listings)} listings",
                 )
                 if not page_listings:
-                    emit("info", message=f"page {page_n} empty — stopping")
+                    # Diagnostic dump so the user can see WHY the page
+                    # parsed empty: what URL did we land on, what was
+                    # the title, and is the "no results" banner there.
+                    try:
+                        final_url = search_page.url
+                    except Exception:
+                        final_url = target_url
+                    try:
+                        title = await search_page.title()
+                    except Exception:
+                        title = "?"
+                    try:
+                        no_results_visible = (
+                            await search_page.query_selector(
+                                "div.no-results, h1.no-results-title",
+                            )
+                        ) is not None
+                    except Exception:
+                        no_results_visible = False
+                    emit(
+                        "info",
+                        message=(
+                            f"page {page_n} empty — final_url={final_url} "
+                            f"title='{title}' no_results_banner={no_results_visible}"
+                        ),
+                    )
                     emit("exhausted")
                     break
 
@@ -274,6 +300,32 @@ async def run(args: argparse.Namespace) -> int:
                     ),
                 )
                 emit("page_done", page=page_n)
+
+                # Follow YP's actual "Next" link instead of guessing the
+                # URL — covers query-string variants the site A/B-tests.
+                # If the page has no next link, we're truly exhausted.
+                try:
+                    next_url = await get_next_search_url(search_page)
+                except Exception as e:
+                    emit(
+                        "warn",
+                        message=f"next-link lookup failed on page {page_n}: {e}",
+                    )
+                    next_url = None
+                if not next_url:
+                    # Fallback: construct page_n+1 URL in case the next
+                    # link selectors all missed but YP still paginates.
+                    constructed = search_url(args.query, args.location, page_n + 1)
+                    emit(
+                        "info",
+                        message=(
+                            f"page {page_n}: no next-link found — "
+                            f"trying constructed url {constructed}"
+                        ),
+                    )
+                    target_url = constructed
+                else:
+                    target_url = next_url
 
                 # polite pause between search pages
                 await asyncio.sleep(random.uniform(2.0, 4.5))
