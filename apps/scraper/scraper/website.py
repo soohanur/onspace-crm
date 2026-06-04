@@ -62,6 +62,17 @@ _PHONE_RE = re.compile(
 _CFEMAIL_RE = re.compile(r'data-cfemail="([0-9a-f]+)"', re.I)
 _HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.I)
 _CONTACTISH_RE = re.compile(r"(?:contact|about|team|staff|get[-_ ]in[-_ ]touch|quote)", re.I)
+# Obfuscation patterns: "user (at) example dot com" / "user [at] example.com" / etc.
+_OBFUSCATED_EMAIL_RE = re.compile(
+    r"([A-Za-z0-9._%+\-]+)\s*(?:\[at\]|\(at\)|@| at | AT )\s*"
+    r"([A-Za-z0-9.\-]+)\s*(?:\[dot\]|\(dot\)| dot | DOT |\.)\s*([A-Za-z]{2,})",
+    re.I,
+)
+# JSON / JSON-LD shapes: "email": "x@y.com", "mail": "...", "contactEmail": "..."
+_JSON_EMAIL_RE = re.compile(
+    r'"(?:email|mail|contactEmail|emailAddress)"\s*:\s*"([^"]+@[^"]+)"',
+    re.I,
+)
 
 _BAD_EMAIL_DOMAINS = (
     "wixpress.com",
@@ -246,6 +257,56 @@ async def _extract_page(page: Page) -> tuple[set[str], set[str], set[str], set[s
             if dec:
                 emails.add(dec)
 
+        # 4b. HTML entity-decoded sweep ('&#64;' / '&commat;' → '@', '&#46;' → '.')
+        try:
+            import html as _html_mod
+
+            decoded = _html_mod.unescape(html)
+            if decoded != html:
+                for m in _EMAIL_RE.finditer(decoded):
+                    emails.add(m.group(0))
+        except Exception:
+            pass
+
+        # 4c. JSON-LD / inline-JSON 'email' fields — Wix/Squarespace/Shopify
+        # frequently embed the business email here even when the visible page
+        # has only a contact form.
+        try:
+            for m in _JSON_EMAIL_RE.finditer(html):
+                em = m.group(1).strip()
+                if "@" in em and "." in em.split("@", 1)[1]:
+                    emails.add(em)
+        except Exception:
+            pass
+
+        # 4d. Obfuscated patterns ("info (at) example dot com") — reconstruct
+        # to a clean address.
+        try:
+            for m in _OBFUSCATED_EMAIL_RE.finditer(html):
+                local = m.group(1)
+                domain = m.group(2)
+                tld = m.group(3)
+                cand = f"{local}@{domain}.{tld}".lower()
+                if _EMAIL_RE.fullmatch(cand):
+                    emails.add(cand)
+        except Exception:
+            pass
+
+    # 4e. Visible body text scan — catches emails rendered into the DOM as
+    # text rather than mailto: anchors (common in Wix/Squarespace sites).
+    try:
+        body_text = await page.inner_text("body")
+        if body_text:
+            for m in _EMAIL_RE.finditer(body_text):
+                emails.add(m.group(0))
+            for m in _OBFUSCATED_EMAIL_RE.finditer(body_text):
+                cand = f"{m.group(1)}@{m.group(2)}.{m.group(3)}".lower()
+                if _EMAIL_RE.fullmatch(cand):
+                    emails.add(cand)
+    except Exception:
+        pass
+
+    if html:
         # 5. Discover contact-ish links from the homepage
         try:
             page_url = page.url
@@ -297,11 +358,14 @@ async def harvest_from_website(
         page = await ctx.new_page()
         try:
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=12_000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=15_000)
             except PWTimeout:
                 pass
+            # Bumped from 4s → 8s. Wix/Squarespace contact pages frequently
+            # finish rendering email-bearing JSON/widgets only after several
+            # extra fetches; 4s was too short.
             try:
-                await page.wait_for_load_state("networkidle", timeout=4_000)
+                await page.wait_for_load_state("networkidle", timeout=8_000)
             except PWTimeout:
                 pass
             page_emails, page_socials, page_links, page_phones = await _extract_page(page)
@@ -322,8 +386,10 @@ async def harvest_from_website(
     homepage_email_count = len(_filter_emails(emails, site_host))
 
     # Step 2: still no email AND/OR no socials? follow contact-ish links.
+    # Cap raised 5 → 10 — many sites have several contact/about/team links
+    # but the email lives behind one specific page (e.g. "team", "owners").
     if (homepage_email_count == 0 or not socials) and discovered:
-        for link in list(discovered)[:5]:
+        for link in list(discovered)[:10]:
             await visit(link)
             if _filter_emails(emails, site_host) and socials:
                 break
