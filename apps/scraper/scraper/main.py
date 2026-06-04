@@ -55,15 +55,15 @@ async def run(args: argparse.Namespace) -> int:
 
     async with async_playwright() as p:
         browser = await make_browser(p, proxy=proxy, headful=headful)
-        # YP fingerprints contexts: after the search page is visited, follow-on
-        # detail navigations in the same context get stripped JSON-LD. We use a
-        # dedicated context for the search loop, and create a *fresh* context
-        # per detail page visit. Costs an extra ~200ms per lead but reliably
-        # gets the full structured data.
-        search_ctx = await make_context(browser)
+        # YP fingerprints contexts: once a context has loaded a search
+        # results page, subsequent navigations in the same context (to
+        # page 2, page 3, …) return a sparse / empty DOM. Diagnostic
+        # confirmed page 2 parses 30 listings in a FRESH context but 0
+        # in a reused one. So we tear down + re-create the search
+        # context per page. Costs ~300ms per page; reliably gets full
+        # listing data on every page.
+        search_ctx = None
         try:
-            search_page = await search_ctx.new_page()
-
             page_n = max(1, int(getattr(args, "start_page", 1) or 1))
             if page_n > 1:
                 emit("info", message=f"resuming at page {page_n}")
@@ -72,6 +72,15 @@ async def run(args: argparse.Namespace) -> int:
             # guessing query-string variants the site might A/B-test.
             target_url = search_url(args.query, args.location, page_n)
             while page_n <= HARD_PAGE_LIMIT:
+                # Fresh context per search page — defeats YP fingerprint.
+                if search_ctx is not None:
+                    try:
+                        await search_ctx.close()
+                    except Exception:
+                        pass
+                search_ctx = await make_context(browser)
+                search_page = await search_ctx.new_page()
+
                 emit("info", message=f"page {page_n}: {target_url}")
                 try:
                     await goto(search_page, target_url)
