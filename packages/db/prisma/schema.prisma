@@ -885,6 +885,16 @@ model Sequence {
   dailySendLimit  Int            @default(250) @map("daily_send_limit")
   sendIntervalSec Int            @default(12) @map("send_interval_sec")
 
+  /// Warm-up ramp. Daily send limit starts at `rampStartCap` on
+  /// `startedAt` and grows by `rampStepPerDay` each day until `rampMaxCap`.
+  /// Set rampStartCap = rampMaxCap to disable the ramp.
+  rampStartCap   Int     @default(50)  @map("ramp_start_cap")
+  rampStepPerDay Int     @default(10)  @map("ramp_step_per_day")
+  rampMaxCap     Int     @default(150) @map("ramp_max_cap")
+  /// When true, the auto-enroll job picks up every new lead with an
+  /// email and stage='new' and enrolls them in this sequence.
+  autoEnrollAll  Boolean @default(false) @map("auto_enroll_all")
+
   enrolledCount  Int @default(0) @map("enrolled_count")
   completedCount Int @default(0) @map("completed_count")
   exitedCount    Int @default(0) @map("exited_count")

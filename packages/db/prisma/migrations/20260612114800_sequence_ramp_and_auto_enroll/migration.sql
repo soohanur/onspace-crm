@@ -1,0 +1,5 @@
+ALTER TABLE "sequences"
+  ADD COLUMN "ramp_start_cap" INTEGER NOT NULL DEFAULT 50,
+  ADD COLUMN "ramp_step_per_day" INTEGER NOT NULL DEFAULT 10,
+  ADD COLUMN "ramp_max_cap" INTEGER NOT NULL DEFAULT 150,
+  ADD COLUMN "auto_enroll_all" BOOLEAN NOT NULL DEFAULT false;
