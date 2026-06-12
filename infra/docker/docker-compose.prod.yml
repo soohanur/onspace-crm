@@ -1,0 +1,129 @@
+# OnspaceCRM — production stack (self-hosted).
+#
+# Brings up:
+#   postgres        — primary DB on a named volume
+#   redis           — BullMQ queue + cache
+#   api             — NestJS HTTP + worker (port 4000)
+#   web             — Next.js standalone (port 3000)
+#   scraper-worker  — same API image, WORKER_ONLY=1, BullMQ-only
+#   cloudflared     — Cloudflare Tunnel sidecar; reads $CLOUDFLARE_TUNNEL_TOKEN
+#
+# Run:
+#   cd /path/to/onspaceCRM
+#   cp infra/docker/.env.example .env
+#   # fill in PUBLIC_WEB_URL, PUBLIC_API_URL, CLOUDFLARE_TUNNEL_TOKEN, etc.
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file .env up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: onspace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onspace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onspace}
+      POSTGRES_DB: ${POSTGRES_DB:-onspace_crm}
+    volumes:
+      - onspace_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onspace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: onspace-redis
+    restart: unless-stopped
+    volumes:
+      - onspace_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    image: onspace/api:latest
+    container_name: onspace-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-onspace}:${POSTGRES_PASSWORD:-onspace}@postgres:5432/${POSTGRES_DB:-onspace_crm}?schema=public
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_TLS: 'false'
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      PUBLIC_BASE_URL: ${PUBLIC_API_URL}
+    expose:
+      - "4000"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL}
+    image: onspace/web:latest
+    container_name: onspace-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+    expose:
+      - "3000"
+
+  scraper-worker:
+    image: onspace/api:latest
+    container_name: onspace-scraper
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      WORKER_ONLY: '1'
+      SCRAPER_PYTHON: python3
+      TUNNEL_DISABLED: '1'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-onspace}:${POSTGRES_PASSWORD:-onspace}@postgres:5432/${POSTGRES_DB:-onspace_crm}?schema=public
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_TLS: 'false'
+    shm_size: '512m'
+
+  cloudflared:
+    # Cloudflare Tunnel — token mode. Create the tunnel + grab the
+    # token from: https://one.dash.cloudflare.com/  →  Networks →
+    # Tunnels → Create tunnel → Docker. Map hostnames in the dashboard:
+    #   <web hostname>  →  http://web:3000
+    #   <api hostname>  →  http://api:4000
+    image: cloudflare/cloudflared:latest
+    container_name: onspace-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - web
+      - api
+
+volumes:
+  onspace_pgdata:
+  onspace_redisdata:
+
+networks:
+  default:
+    name: onspace-net
