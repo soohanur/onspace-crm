@@ -58,6 +58,13 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 4000
+      # The api container processes the BullMQ scrape queue too (same
+      # binary as scraper-worker). Without SCRAPER_PYTHON pointing at
+      # the system python3, the worker spawn falls back to the
+      # `.venv/bin/python` dev path which doesn't exist in the prod
+      # image — every job picked up by api would 'fail' instantly
+      # with ENOENT.
+      SCRAPER_PYTHON: python3
       DATABASE_URL: postgresql://${POSTGRES_USER:-onspace}:${POSTGRES_PASSWORD:-onspace}@postgres:5432/${POSTGRES_DB:-onspace_crm}?schema=public
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
