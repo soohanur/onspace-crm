@@ -24,6 +24,7 @@ import traceback
 from playwright.async_api import async_playwright
 
 from .db import email_exists, get_conn, lead_exists, upsert_lead
+from .email_validate import first_valid_email, is_valid_email
 from .dedup import dedup_hash, normalize_phone
 from .event import emit
 from .website import harvest_from_website, guess_owner_linkedin_search_url
@@ -263,37 +264,61 @@ async def run(args: argparse.Namespace) -> int:
                                     message=f"website harvest failed for {site_url}: {e}",
                                 )
 
-                        has_contact = bool(
-                            (listing.email and listing.email.strip())
-                            or (listing.phone and listing.phone.strip())
-                            or any((e or "").strip() for e in (listing.emails or []))
-                            or any((p or "").strip() for p in (listing.phones or []))
+                        # Email-only policy. The outreach engine sends
+                        # cold drips by email; a listing with no email
+                        # is dead weight and is dropped before save.
+                        candidate_emails = list(
+                            filter(
+                                None,
+                                [listing.email] + list(listing.emails or []),
+                            )
                         )
-                        if not has_contact:
+                        if not candidate_emails:
                             page_dropped += 1
                             emit(
                                 "info",
-                                message=f"skip no-contact: {listing.business_name}",
+                                message=f"skip no-email: {listing.business_name}",
                             )
+                            continue
+
+                        # Pre-save validation (syntax + disposable + MX).
+                        # Conservative: DNS transient errors KEEP the
+                        # candidate. The bounce-handler is the final
+                        # filter post-send.
+                        good_email = first_valid_email(candidate_emails)
+                        if not good_email:
+                            page_dropped += 1
+                            emit(
+                                "info",
+                                message=f"skip invalid-email: {listing.business_name} ({candidate_emails[0]})",
+                            )
+                            continue
+
+                        # Promote the validated address to primary so the
+                        # outreach engine targets a clean recipient.
+                        listing.email = good_email
+                        # Also filter the array to only-valid emails.
+                        listing.emails = [
+                            e for e in candidate_emails if is_valid_email(e)
+                        ]
+
+                        # Email-dedup. Same operator commonly lists
+                        # multiple business names in YP behind one
+                        # contact email — skipping these stops the
+                        # outreach sequence from hammering the same
+                        # mailbox three times.
+                        if email_exists(conn, [good_email]):
+                            page_dropped += 1
+                            emit(
+                                "info",
+                                message=f"skip dup-email: {listing.business_name} ({good_email})",
+                            )
+                        elif save_now():
+                            saved += 1
+                            page_saved_count += 1
+                            emit("saved", totalSaved=saved)
                         else:
-                            # Email-dedup. Same operator commonly lists
-                            # multiple business names in YP behind one
-                            # contact email — skipping these stops the
-                            # outreach sequence from hammering the same
-                            # mailbox three times.
-                            all_emails = list(filter(None, [listing.email] + list(listing.emails or [])))
-                            if all_emails and email_exists(conn, all_emails):
-                                page_dropped += 1
-                                emit(
-                                    "info",
-                                    message=f"skip dup-email: {listing.business_name} ({all_emails[0]})",
-                                )
-                            elif save_now():
-                                saved += 1
-                                page_saved_count += 1
-                                emit("saved", totalSaved=saved)
-                            else:
-                                emit("saved", totalSaved=saved)
+                            emit("saved", totalSaved=saved)
                     except Exception as e:
                         page_errors += 1
                         emit(

@@ -161,6 +161,54 @@ export class GmailService {
     const messages = res.data.messages ?? [];
     return messages.map((m) => decodeMessage(m));
   }
+
+  /**
+   * Search the connected mailbox. Forwarded to Gmail's `q=…` syntax
+   * (same as the search bar in the Gmail UI). Used by the bounce-
+   * handler to grep for `from:mailer-daemon` deliveries.
+   */
+  async listMessages(opts: {
+    accessToken: string;
+    refreshToken: string;
+    q: string;
+    maxResults?: number;
+  }): Promise<{ id: string; threadId: string }[]> {
+    const client = this.oauth2Client();
+    client.setCredentials({
+      access_token: opts.accessToken,
+      refresh_token: opts.refreshToken,
+    });
+    const gmail = google.gmail({ version: 'v1', auth: client });
+    const res = await gmail.users.messages.list({
+      userId: 'me',
+      q: opts.q,
+      maxResults: opts.maxResults ?? 100,
+    });
+    return (res.data.messages ?? []).map((m) => ({
+      id: m.id ?? '',
+      threadId: m.threadId ?? '',
+    }));
+  }
+
+  /** Full fetch of a single message decoded into our friendly shape. */
+  async fetchMessage(opts: {
+    accessToken: string;
+    refreshToken: string;
+    id: string;
+  }): Promise<GmailMessageDetail> {
+    const client = this.oauth2Client();
+    client.setCredentials({
+      access_token: opts.accessToken,
+      refresh_token: opts.refreshToken,
+    });
+    const gmail = google.gmail({ version: 'v1', auth: client });
+    const res = await gmail.users.messages.get({
+      userId: 'me',
+      id: opts.id,
+      format: 'full',
+    });
+    return decodeMessage(res.data);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

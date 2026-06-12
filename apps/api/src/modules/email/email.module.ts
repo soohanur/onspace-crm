@@ -6,6 +6,8 @@ import { EmailService } from './email.service';
 import { GmailService } from './gmail.service';
 import { GoogleCalendarService } from './google-calendar.service';
 import { EmailReplyPoller } from './email-reply-poller.service';
+import { EmailBounceHandler } from './bounce-handler.service';
+import { EmailValidatorService } from './validator.service';
 import { TunnelService } from './tunnel.service';
 import { LeadsModule } from '../leads/leads.module';
 
@@ -19,6 +21,8 @@ import { LeadsModule } from '../leads/leads.module';
     EmailAccountsService,
     EmailService,
     EmailReplyPoller,
+    EmailBounceHandler,
+    EmailValidatorService,
   ],
   exports: [
     EmailService,
@@ -26,6 +30,8 @@ import { LeadsModule } from '../leads/leads.module';
     GoogleCalendarService,
     GmailService,
     TunnelService,
+    EmailValidatorService,
+    EmailBounceHandler,
   ],
 })
 export class EmailModule {}
