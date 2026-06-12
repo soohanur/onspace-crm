@@ -23,7 +23,7 @@ import traceback
 
 from playwright.async_api import async_playwright
 
-from .db import get_conn, lead_exists, upsert_lead
+from .db import email_exists, get_conn, lead_exists, upsert_lead
 from .dedup import dedup_hash, normalize_phone
 from .event import emit
 from .website import harvest_from_website, guess_owner_linkedin_search_url
@@ -276,10 +276,24 @@ async def run(args: argparse.Namespace) -> int:
                                 message=f"skip no-contact: {listing.business_name}",
                             )
                         else:
-                            if save_now():
+                            # Email-dedup. Same operator commonly lists
+                            # multiple business names in YP behind one
+                            # contact email — skipping these stops the
+                            # outreach sequence from hammering the same
+                            # mailbox three times.
+                            all_emails = list(filter(None, [listing.email] + list(listing.emails or [])))
+                            if all_emails and email_exists(conn, all_emails):
+                                page_dropped += 1
+                                emit(
+                                    "info",
+                                    message=f"skip dup-email: {listing.business_name} ({all_emails[0]})",
+                                )
+                            elif save_now():
                                 saved += 1
                                 page_saved_count += 1
-                            emit("saved", totalSaved=saved)
+                                emit("saved", totalSaved=saved)
+                            else:
+                                emit("saved", totalSaved=saved)
                     except Exception as e:
                         page_errors += 1
                         emit(

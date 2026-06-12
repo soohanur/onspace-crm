@@ -124,6 +124,34 @@ def upsert_lead(conn: psycopg.Connection, **lead: Any) -> bool:
         return bool(row and row.get("inserted"))
 
 
+def email_exists(
+    conn: psycopg.Connection,
+    emails: list[str],
+) -> bool:
+    """True if any of `emails` is already attached to a lead anywhere in
+    the table (primary `email` column OR the `emails` array). Used by the
+    scraper to skip a business whose address we already hold via some
+    other listing — same operator running multiple business names from
+    one contact email, common in YP."""
+    cleaned = [e.strip().lower() for e in emails if e and isinstance(e, str)]
+    cleaned = [e for e in cleaned if "@" in e]
+    if not cleaned:
+        return False
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1 FROM leads
+            WHERE LOWER(email) = ANY(%s::text[])
+               OR EXISTS (
+                 SELECT 1 FROM unnest(emails) e WHERE LOWER(e) = ANY(%s::text[])
+               )
+            LIMIT 1
+            """,
+            (cleaned, cleaned),
+        )
+        return cur.fetchone() is not None
+
+
 def lead_exists(
     conn: psycopg.Connection,
     *,
