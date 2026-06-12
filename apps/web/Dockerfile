@@ -43,10 +43,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Standalone server.js + minimal node_modules
+# Standalone server.js + minimal node_modules. `public/` is empty in
+# this repo so we don't copy it — adding the COPY back is fine once any
+# static asset lands there.
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
