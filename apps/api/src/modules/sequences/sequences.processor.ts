@@ -4,7 +4,6 @@ import { Job } from 'bullmq';
 import { LeadStage } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import { EmailValidatorService } from '../email/validator.service';
 import { renderTags, MergeContext } from '../campaigns/merge-tags';
 import { SequencesService } from './sequences.service';
 import {
@@ -86,7 +85,6 @@ export class SequencesProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly emails: EmailService,
     private readonly sequences: SequencesService,
-    private readonly validator: EmailValidatorService,
   ) {
     super();
   }
@@ -274,32 +272,6 @@ export class SequencesProcessor extends WorkerHost {
           data: { nextSendAt: pushTo },
         });
         skipped += 1;
-        continue;
-      }
-
-      // Pre-send recipient validation. We DON'T do this in the
-      // auto-enroll sweep because there are 200 leads/tick and MX
-      // lookups are slow — better to defer until the send moment so
-      // we only pay the lookup once per email that's actually about
-      // to fire. Cache is shared across the same domain.
-      const validation = await this.validator.validate(enrollment.toEmail);
-      if (!validation.valid) {
-        await this.markExited(
-          enrollment.id,
-          seq.id,
-          'exited_manual',
-          `recipient invalid: ${validation.reason}`,
-        );
-        // Cascade the lead too so future sequences also skip it.
-        try {
-          await this.prisma.lead.update({
-            where: { id: enrollment.leadId },
-            data: { validity: 'invalid' },
-          });
-        } catch {
-          /* lead might have been deleted; tolerate */
-        }
-        exited += 1;
         continue;
       }
 

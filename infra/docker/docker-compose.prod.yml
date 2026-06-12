@@ -81,6 +81,7 @@ services:
       OUTREACH_HOUR_END: ${OUTREACH_HOUR_END:-17}
       OUTREACH_GAP_MIN_SEC: ${OUTREACH_GAP_MIN_SEC:-480}
       OUTREACH_GAP_MAX_SEC: ${OUTREACH_GAP_MAX_SEC:-600}
+      EMAIL_REPLY_POLL_SECONDS: ${EMAIL_REPLY_POLL_SECONDS:-60}
     ports:
       # Bind to loopback only — Tailscale on the host reaches these
       # via 127.0.0.1 then Funnel publishes them. Not exposed to LAN.

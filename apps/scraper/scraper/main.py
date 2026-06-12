@@ -24,7 +24,6 @@ import traceback
 from playwright.async_api import async_playwright
 
 from .db import email_exists, get_conn, lead_exists, upsert_lead
-from .email_validate import first_valid_email, is_valid_email
 from .dedup import dedup_hash, normalize_phone
 from .event import emit
 from .website import harvest_from_website, guess_owner_linkedin_search_url
@@ -264,9 +263,11 @@ async def run(args: argparse.Namespace) -> int:
                                     message=f"website harvest failed for {site_url}: {e}",
                                 )
 
-                        # Email-only policy. The outreach engine sends
-                        # cold drips by email; a listing with no email
-                        # is dead weight and is dropped before save.
+                        # Email-only policy: drop the business if we
+                        # never found an email. No further validation
+                        # (no MX / disposable / bounce check) — the
+                        # bounce-back loop handles any dead addresses
+                        # after first send.
                         candidate_emails = list(
                             filter(
                                 None,
@@ -281,37 +282,16 @@ async def run(args: argparse.Namespace) -> int:
                             )
                             continue
 
-                        # Pre-save validation (syntax + disposable + MX).
-                        # Conservative: DNS transient errors KEEP the
-                        # candidate. The bounce-handler is the final
-                        # filter post-send.
-                        good_email = first_valid_email(candidate_emails)
-                        if not good_email:
-                            page_dropped += 1
-                            emit(
-                                "info",
-                                message=f"skip invalid-email: {listing.business_name} ({candidate_emails[0]})",
-                            )
-                            continue
-
-                        # Promote the validated address to primary so the
-                        # outreach engine targets a clean recipient.
-                        listing.email = good_email
-                        # Also filter the array to only-valid emails.
-                        listing.emails = [
-                            e for e in candidate_emails if is_valid_email(e)
-                        ]
-
                         # Email-dedup. Same operator commonly lists
                         # multiple business names in YP behind one
                         # contact email — skipping these stops the
                         # outreach sequence from hammering the same
                         # mailbox three times.
-                        if email_exists(conn, [good_email]):
+                        if email_exists(conn, candidate_emails):
                             page_dropped += 1
                             emit(
                                 "info",
-                                message=f"skip dup-email: {listing.business_name} ({good_email})",
+                                message=f"skip dup-email: {listing.business_name} ({candidate_emails[0]})",
                             )
                         elif save_now():
                             saved += 1

@@ -3,10 +3,6 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": false,
-    "assets": [
-      "modules/email/disposable-domains.txt"
-    ],
-    "watchAssets": false
+    "deleteOutDir": false
   }
 }

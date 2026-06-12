@@ -619,10 +619,6 @@ export class SequencesService {
         where: {
           email: { not: null },
           stage: 'new',
-          // Skip leads we've previously marked invalid (bounce handler
-          // OR explicit operator action). Prevents re-queuing dead
-          // mailboxes on every sweep.
-          validity: { not: 'invalid' },
           sequenceEnrollments: { none: { sequenceId: seq.id } },
         },
         select: { id: true, email: true },
