@@ -68,8 +68,10 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
       PUBLIC_BASE_URL: ${PUBLIC_API_URL}
-    expose:
-      - "4000"
+    ports:
+      # Bind to loopback only — Tailscale on the host reaches these
+      # via 127.0.0.1 then Funnel publishes them. Not exposed to LAN.
+      - "127.0.0.1:4000:4000"
 
   web:
     build:
@@ -85,8 +87,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: '3000'
-    expose:
-      - "3000"
+    ports:
+      - "127.0.0.1:3000:3000"
 
   scraper-worker:
     image: onspace/api:latest
@@ -106,19 +108,11 @@ services:
       REDIS_TLS: 'false'
     shm_size: '512m'
 
-  cloudflared:
-    # Cloudflare Tunnel — token mode. Create the tunnel + grab the
-    # token from: https://one.dash.cloudflare.com/  →  Networks →
-    # Tunnels → Create tunnel → Docker. Map hostnames in the dashboard:
-    #   <web hostname>  →  http://web:3000
-    #   <api hostname>  →  http://api:4000
-    image: cloudflare/cloudflared:latest
-    container_name: onspace-cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - web
-      - api
+# Public ingress is handled by Tailscale Funnel running on the Windows
+# host (free, no card required). See infra/docker/DEPLOY.md for the
+# `tailscale serve` + `tailscale funnel on` commands. The web + api
+# services bind to 127.0.0.1 above so only Tailscale (running on the
+# host) can reach them — the LAN can't.
 
 volumes:
   onspace_pgdata:

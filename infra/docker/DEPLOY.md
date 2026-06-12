@@ -1,13 +1,20 @@
-# OnspaceCRM — Self-host on Windows + Cloudflare Tunnel
+# OnspaceCRM — Self-host on Windows + Tailscale Funnel (free public URL)
 
 End-to-end: bring the stack up on the Windows box via Docker Desktop,
-expose it through a Cloudflare Tunnel, point your domain at it.
+expose it through Tailscale Funnel (free, no credit card, stable URL).
+
+## Why Tailscale Funnel over Cloudflare Tunnel
+
+- Cloudflare Zero Trust requires a billing card on file even for the
+  free tier.
+- Tailscale Funnel is free forever, no card, 1 hostname per machine,
+  HTTPS handled automatically, URL = `<machine>.<tailnet>.ts.net`.
 
 ## Prereqs on the Windows host
 
 - Docker Desktop running (WSL2 backend)
 - Git for Windows
-- A domain in Cloudflare (free plan is fine)
+- Tailscale installed + signed in (you already have this — IP 100.79.198.15)
 
 ## 1. Clone the repo on Windows
 
@@ -17,20 +24,17 @@ git clone https://github.com/soohanur/onspace-crm.git onspaceCRM
 cd onspaceCRM
 ```
 
-## 2. Create the Cloudflare Tunnel
+## 2. Look up your Tailscale URL
 
-1. Open https://one.dash.cloudflare.com/  → **Networks → Tunnels**.
-2. Click **Create a tunnel** → connector type **Cloudflared** → name it
-   `onspace-crm`. → Save.
-3. On the **Install connector** screen, switch to the **Docker** tab and
-   copy ONLY the long `--token eyJ...` value (you won't run that command;
-   the compose file already wires it in).
-4. Click **Next** → **Public hostnames** tab and add two routes:
-   | Subdomain | Domain | Service |
-   |-----------|--------|---------|
-   | `crm`     | your domain | `HTTP` → `web:3000` |
-   | `api`     | your domain | `HTTP` → `api:4000` |
-5. Save. Cloudflare will auto-create DNS CNAME records for both.
+In PowerShell:
+
+```powershell
+tailscale status
+```
+
+Find your machine name (lowercase, e.g. `desktop-u7er3ui`) and tailnet
+name (e.g. `tail1234.ts.net`). The Funnel URL will be
+`https://<machine>.<tailnet>`.
 
 ## 3. Fill in `.env`
 
@@ -40,12 +44,11 @@ notepad .env
 ```
 
 Fill:
-- `PUBLIC_WEB_URL=https://crm.yourdomain.com`
-- `PUBLIC_API_URL=https://api.yourdomain.com`
+- `PUBLIC_WEB_URL=https://<machine>.<tailnet>` (same URL serves web + api)
+- `PUBLIC_API_URL=https://<machine>.<tailnet>`
 - `POSTGRES_PASSWORD=` (anything long + random)
-- `JWT_SECRET=` (use `openssl rand -hex 64` in WSL or any 128-char hex)
-- `GOOGLE_REDIRECT_URI=https://api.yourdomain.com/auth/google/callback`
-- `CLOUDFLARE_TUNNEL_TOKEN=eyJ...` (from step 2 above)
+- `JWT_SECRET=` (128 hex chars; in WSL: `openssl rand -hex 64`)
+- `GOOGLE_REDIRECT_URI=https://<machine>.<tailnet>/auth/google/callback`
 
 ## 4. Bring the stack up
 
@@ -53,7 +56,7 @@ Fill:
 docker compose -f infra\docker\docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-First build is ~10-15 min (Playwright + Node + pnpm). Subsequent builds
+First build is ~10–15 min (Playwright + Node + pnpm). Subsequent builds
 hit the layer cache and are seconds.
 
 ## 5. Apply DB migrations
@@ -62,16 +65,58 @@ hit the layer cache and are seconds.
 docker compose -f infra\docker\docker-compose.prod.yml --env-file .env exec api npx --prefix packages/db prisma migrate deploy
 ```
 
-## 6. Verify
+## 6. Enable Tailscale Funnel (the public URL)
+
+The compose file binds `web` to `127.0.0.1:3000` and `api` to
+`127.0.0.1:4000` on the Windows host. We tell Tailscale to publish
+both behind one HTTPS hostname:
+
+Open PowerShell **as Administrator** on the Windows box:
 
 ```powershell
-docker compose -f infra\docker\docker-compose.prod.yml --env-file .env ps
+# Clear any prior config (safe to re-run)
+tailscale serve reset
+
+# Web at the root /
+tailscale serve --bg --https=443 / http://127.0.0.1:3000
+
+# API at /api (Nest already mounts everything under /api)
+tailscale serve --bg --https=443 /api http://127.0.0.1:4000
+
+# Publish publicly via Funnel
+tailscale funnel 443 on
+
+# Confirm + print the URL
+tailscale serve status
 ```
 
-All services should be `Up` / `healthy`. Then:
+`tailscale serve status` prints your public URL, e.g.
+`https://desktop-u7er3ui.tail1234.ts.net`. That's the URL to put in
+`PUBLIC_WEB_URL` / `PUBLIC_API_URL` in `.env` (if you hadn't already)
+and rebuild web:
 
-- `https://crm.yourdomain.com` → the web app
-- `https://api.yourdomain.com/api/sequences` → JSON of seeded sequence
+```powershell
+docker compose -f infra\docker\docker-compose.prod.yml --env-file .env build --no-cache web
+docker compose -f infra\docker\docker-compose.prod.yml --env-file .env up -d web
+```
+
+## 7. Verify
+
+- `https://<machine>.<tailnet>/` → the web app
+- `https://<machine>.<tailnet>/api/sequences` → JSON of the seeded sequence
+
+## Using your own domain (optional, still free)
+
+If you own a domain (any registrar, doesn't have to be on Cloudflare),
+add a CNAME record:
+
+```
+crm.yourdomain.com   CNAME   desktop-u7er3ui.tail1234.ts.net
+```
+
+Then in `.env` set `PUBLIC_WEB_URL=https://crm.yourdomain.com` and
+rebuild web. Tailscale issues a valid LetsEncrypt cert for the tailnet
+URL — the CNAME just aliases your custom hostname to it.
 
 ## Common ops
 
@@ -85,14 +130,17 @@ docker compose -f infra\docker\docker-compose.prod.yml --env-file .env up -d --b
 
 # Stop everything (data persists in volumes)
 docker compose -f infra\docker\docker-compose.prod.yml --env-file .env down
+
+# Turn the public URL off
+tailscale funnel 443 off
 ```
 
-## Updating the public URL
+## Troubleshooting
 
-If you change the hostnames in Cloudflare, you must rebuild `web` because
-`NEXT_PUBLIC_API_URL` is baked at build time:
-
-```powershell
-docker compose -f infra\docker\docker-compose.prod.yml --env-file .env build --no-cache web
-docker compose -f infra\docker\docker-compose.prod.yml --env-file .env up -d web
-```
+- `tailscale funnel 443 on` says "not supported" → your tailnet doesn't
+  have Funnel enabled. Go to https://login.tailscale.com/admin/dns →
+  **Funnel** section → toggle on. Free.
+- 502 from the Funnel URL → containers not running. Check
+  `docker compose ps`.
+- Web loads but API calls 404 → `NEXT_PUBLIC_API_URL` was baked at the
+  wrong URL. Rebuild `web` after fixing `.env`.
