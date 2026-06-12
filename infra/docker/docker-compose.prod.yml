@@ -68,7 +68,13 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Code reads GOOGLE_OAUTH_REDIRECT_URI (gmail.service.ts / google-calendar.service.ts).
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
-      PUBLIC_BASE_URL: ${PUBLIC_API_URL}
+      # OAuth refresh tokens are encrypted with this key before going into
+      # Postgres. Must be set or /email/auth/connect refuses. 32+ bytes.
+      EMAIL_TOKEN_ENC_KEY: ${EMAIL_TOKEN_ENC_KEY:-}
+      # Used by TunnelService for the tracking pixel hostname; used by
+      # the OAuth callback to redirect back to the web app.
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
+      FRONTEND_URL: ${PUBLIC_WEB_URL}
     ports:
       # Bind to loopback only — Tailscale on the host reaches these
       # via 127.0.0.1 then Funnel publishes them. Not exposed to LAN.
