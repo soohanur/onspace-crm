@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   ImageIcon,
   Inbox,
-  Mail,
   Reply,
   Search,
 } from 'lucide-react';
@@ -376,5 +375,3 @@ function formatWhen(iso: string): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-// Keep import used; otherwise Mail tree-shakes away.
-export const _icons = { Mail };
