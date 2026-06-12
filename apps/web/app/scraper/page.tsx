@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Autocomplete } from '@/components/Autocomplete';
 import { LeadsTable } from '@/components/LeadsTable';
 import { ScrapePipelinePanel } from '@/components/scraper/ScrapePipelinePanel';
-import { Loader2, Play, Square } from 'lucide-react';
+import { Loader2, Plus, Square } from 'lucide-react';
 
 // Set NEXT_PUBLIC_SCRAPER_DISABLED=1 on hosts that can't run the Python
 // Playwright subprocess (e.g. Render free instances). Page still renders;
@@ -46,6 +46,10 @@ export default function LeadScraperPage() {
       }),
     onSuccess: (job) => {
       setActiveJobId(job.id);
+      // Clear the form so the right-hand button reverts from
+      // "Add Pipeline" back to "Stop Scrape".
+      setQuery('');
+      setLocation('');
       // Drop any cached leads from the previous job so the table starts empty.
       qc.removeQueries({ queryKey: ['leads-by-job'] });
       qc.invalidateQueries({ queryKey: ['scrape-jobs'] });
@@ -107,8 +111,13 @@ export default function LeadScraperPage() {
   });
 
   const isRunning = job?.status === 'running' || job?.status === 'queued';
-  const canSubmit =
-    query.trim().length >= 2 && location.trim().length >= 2 && !startJob.isPending && !isRunning;
+  // Right-hand button is a single 3-state control:
+  //   1. inputs filled → "Add Pipeline" (queues this category+location)
+  //   2. inputs empty + something running → "Stop Scrape" (cancels active job)
+  //   3. inputs empty + nothing running → disabled "Stop Scrape" placeholder
+  const hasInputs =
+    query.trim().length >= 2 && location.trim().length >= 2;
+  const canAddPipeline = hasInputs && !startJob.isPending;
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
@@ -148,12 +157,30 @@ export default function LeadScraperPage() {
             />
           </div>
           <div className="md:col-span-2">
-            {isRunning ? (
+            {hasInputs ? (
+              <Button
+                onClick={() => startJob.mutate()}
+                disabled={!canAddPipeline}
+                className="w-full"
+              >
+                {startJob.isPending ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Adding…
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    Add Pipeline
+                  </>
+                )}
+              </Button>
+            ) : (
               <Button
                 variant="secondary"
                 onClick={() => activeJobId && cancelJob.mutate(activeJobId)}
-                disabled={cancelJob.isPending}
-                className="w-full !text-error !border-error hover:!bg-errorBg"
+                disabled={!isRunning || cancelJob.isPending}
+                className="w-full !text-error !border-error hover:!bg-errorBg disabled:!text-neutral disabled:!border-border"
               >
                 {cancelJob.isPending ? (
                   <>
@@ -167,24 +194,6 @@ export default function LeadScraperPage() {
                   </>
                 )}
               </Button>
-            ) : (
-              <Button
-                onClick={() => startJob.mutate()}
-                disabled={!canSubmit}
-                className="w-full"
-              >
-                {startJob.isPending ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Starting…
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} />
-                    Start Scrape
-                  </>
-                )}
-              </Button>
             )}
           </div>
         </div>
@@ -195,9 +204,9 @@ export default function LeadScraperPage() {
         )}
       </Card>
 
-      {/* Pipeline workspace: bulk add + live table of every job */}
+      {/* Pipeline workspace: live table of every job. New rows are added
+          from the Category + Location form above (Add Pipeline). */}
       <ScrapePipelinePanel
-        disabled={SCRAPER_DISABLED}
         onSelectJob={(id) => setActiveJobId(id)}
       />
 

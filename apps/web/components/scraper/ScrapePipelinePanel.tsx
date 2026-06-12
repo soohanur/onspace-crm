@@ -12,7 +12,6 @@ import {
   Layers,
   Loader2,
   Pencil,
-  Plus,
   RotateCcw,
   Save,
   Trash2,
@@ -30,27 +29,15 @@ import { Chip } from '../ui/Chip';
  * leads table below has room when the user just wants to watch results.
  */
 export function ScrapePipelinePanel({
-  disabled,
   onSelectJob,
 }: {
-  disabled?: boolean;
   onSelectJob: (jobId: string) => void;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);
-  const [bulkCategories, setBulkCategories] = useState('');
-  const [bulkLocations, setBulkLocations] = useState('');
   const [editing, setEditing] = useState<
     null | { id: string; query: string; location: string }
   >(null);
-
-  const parseList = (s: string) =>
-    Array.from(
-      new Set(s.split(/\r?\n|,/).map((x) => x.trim()).filter(Boolean)),
-    );
-  const cats = parseList(bulkCategories);
-  const locs = parseList(bulkLocations);
-  const planned = cats.length * locs.length;
 
   // Live list of jobs — poll every 2s so newly queued / progressing rows
   // appear without manual refresh while the user adds more.
@@ -69,20 +56,6 @@ export function ScrapePipelinePanel({
     }
     return c;
   }, [jobs]);
-
-  const queueBatch = useMutation({
-    mutationFn: () =>
-      api.createScrapeJobsBatch({
-        searchQueries: cats,
-        searchLocations: locs,
-      }),
-    onSuccess: (res) => {
-      setBulkCategories('');
-      setBulkLocations('');
-      qc.invalidateQueries({ queryKey: ['scrape-jobs'] });
-      if (res.jobs[0]?.id) onSelectJob(res.jobs[0].id);
-    },
-  });
 
   const updateJob = useMutation({
     mutationFn: (input: {
@@ -159,41 +132,8 @@ export function ScrapePipelinePanel({
 
       {open && (
         <div className="border-t border-border">
-          {/* Add */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 p-3 items-start">
-            <textarea
-              value={bulkCategories}
-              onChange={(e) => setBulkCategories(e.target.value)}
-              placeholder="Categories"
-              rows={2}
-              className="w-full text-bodysm rounded-md border border-border bg-surface p-2 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-            />
-            <textarea
-              value={bulkLocations}
-              onChange={(e) => setBulkLocations(e.target.value)}
-              placeholder="Locations"
-              rows={2}
-              className="w-full text-bodysm rounded-md border border-border bg-surface p-2 placeholder:text-neutral focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition resize-none font-mono"
-            />
-            <Button
-              onClick={() => queueBatch.mutate()}
-              disabled={disabled || planned === 0 || queueBatch.isPending}
-              className="!h-[60px] !min-w-[120px]"
-            >
-              {queueBatch.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <>
-                  <Plus size={14} /> {planned > 0 ? `Add ${planned}` : 'Add'}
-                </>
-              )}
-            </Button>
-          </div>
-          {queueBatch.error && (
-            <div className="px-3 pb-2 text-error text-caption">
-              {(queueBatch.error as Error).message}
-            </div>
-          )}
+          {/* Bulk-add textarea row removed — pipeline rows are added via
+              the top Category + Location form ("Add Pipeline" button). */}
 
           {/* Table */}
           <div className="border-t border-border overflow-x-auto scroll-thin">
