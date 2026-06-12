@@ -86,6 +86,10 @@ services:
       - api
     environment:
       NODE_ENV: production
+      # Bind to all interfaces. Next 15 standalone defaults to
+      # os.hostname() which inside Docker is the container ID — and the
+      # container can't resolve its own hostname (EAI_AGAIN).
+      HOSTNAME: 0.0.0.0
       PORT: '3000'
     ports:
       - "127.0.0.1:3000:3000"
