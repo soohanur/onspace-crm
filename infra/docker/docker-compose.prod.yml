@@ -66,7 +66,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      # Code reads GOOGLE_OAUTH_REDIRECT_URI (gmail.service.ts / google-calendar.service.ts).
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
       PUBLIC_BASE_URL: ${PUBLIC_API_URL}
     ports:
       # Bind to loopback only — Tailscale on the host reaches these
