@@ -499,7 +499,7 @@ export class SequencesService {
           name: 'Outreach Step 1 — Initial',
           description: 'Default outreach: initial cold email',
           subject:
-            '{{lead.businessName}}: I noticed a few things on your website',
+            '{{businessName}}: I noticed a few things on your website',
           bodyText: [
             'Hey there,',
             '',
@@ -520,7 +520,7 @@ export class SequencesService {
           name: 'Outreach Step 2 — Follow-up (3 days)',
           description: 'Default outreach: follow-up at +3 days',
           subject:
-            'Re: {{lead.businessName}}: I noticed a few things on your website',
+            'Re: {{businessName}}: I noticed a few things on your website',
           bodyText: [
             'Hey,',
             '',
