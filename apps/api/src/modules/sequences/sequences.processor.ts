@@ -5,9 +5,11 @@ import { LeadStage } from '@onspace/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { renderTags, MergeContext } from '../campaigns/merge-tags';
+import { SequencesService } from './sequences.service';
 import {
   SEQUENCES_QUEUE,
   SEQUENCES_TICK_BATCH_SIZE,
+  SEQUENCE_AUTO_ENROLL_JOB,
   SEQUENCE_STOP_STAGES,
 } from './sequences.constants';
 
@@ -35,11 +37,15 @@ export class SequencesProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emails: EmailService,
+    private readonly sequences: SequencesService,
   ) {
     super();
   }
 
-  async process(_job: Job) {
+  async process(job: Job) {
+    if (job.name === SEQUENCE_AUTO_ENROLL_JOB) {
+      return this.sequences.autoEnrollSweep();
+    }
     return this.tick();
   }
 
@@ -142,7 +148,17 @@ export class SequencesProcessor extends WorkerHost {
         }
       }
 
-      // Daily cap check.
+      // Daily cap check. We honor the lower of (this sequence's ramped
+      // cap, the account's own absolute daily limit). Tracked per
+      // account across the tick so multiple sequences on one account
+      // share the budget.
+      const rampedCap = this.sequences.rampedDailyCap({
+        rampStartCap: seq.rampStartCap,
+        rampStepPerDay: seq.rampStepPerDay,
+        rampMaxCap: seq.rampMaxCap,
+        startedAt: seq.startedAt,
+        dailySendLimit: seq.dailySendLimit,
+      });
       let remaining = remainingByAccount.get(seq.accountId);
       if (remaining === undefined) {
         const sentToday = await this.prisma.emailLog.count({
@@ -151,7 +167,7 @@ export class SequencesProcessor extends WorkerHost {
             sentAt: { gte: startOfDay },
           },
         });
-        remaining = Math.max(0, seq.dailySendLimit - sentToday);
+        remaining = Math.max(0, rampedCap - sentToday);
         remainingByAccount.set(seq.accountId, remaining);
       }
       if (remaining <= 0) {

@@ -2,6 +2,7 @@ import { LeadStage } from '@onspace/db';
 
 export const SEQUENCES_QUEUE = 'sequences';
 export const SEQUENCE_TICK_JOB = 'sequence-tick';
+export const SEQUENCE_AUTO_ENROLL_JOB = 'sequence-auto-enroll';
 
 /**
  * Per-tick cap on the number of enrollments we look at. Tighter than the

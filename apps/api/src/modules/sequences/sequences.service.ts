@@ -462,4 +462,223 @@ export class SequencesService {
     });
     if (!seq) throw new NotFoundException('Sequence not found');
   }
+
+  /**
+   * One-time provisioning of the default outreach sequence (3 steps —
+   * day 0, day 3, day 7) using the templates the workspace owner
+   * supplied. Idempotent: skipped if an `autoEnrollAll` sequence
+   * already exists, OR if no email account is yet connected. Triggered
+   * from `onModuleInit` of SequencesScheduler.
+   *
+   * Templates are stored in the database as `EmailTemplate` rows and
+   * referenced by the steps — admins can edit them via /templates
+   * without losing the sequence wiring.
+   */
+  async ensureDefaultOutreachSequence(): Promise<{ created: boolean }> {
+    try {
+      const existing = await this.prisma.sequence.findFirst({
+        where: { autoEnrollAll: true },
+        select: { id: true },
+      });
+      if (existing) return { created: false };
+
+      const account = await this.prisma.emailAccount.findFirst({
+        where: { active: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!account) {
+        this.log.log(
+          'default-outreach: no connected email account yet — deferring',
+        );
+        return { created: false };
+      }
+
+      const t1 = await this.prisma.emailTemplate.create({
+        data: {
+          name: 'Outreach Step 1 — Initial',
+          description: 'Default outreach: initial cold email',
+          subject:
+            '{{lead.businessName}}: I noticed a few things on your website',
+          bodyText: [
+            'Hey there,',
+            '',
+            'This is Rafi. I came across your website. I found it a bit confusing to understand exactly what services you offer and what step I should take next. The design also feels outdated, some pages load slowly, and the mobile experience could be improved.',
+            'I believe these issues might be causing you to lose potential customers.',
+            '',
+            "I'd be happy to show you the issues I found and share a few ideas.",
+            'Would you be open to a quick 15-minute Google Meet sometime this week?',
+            '',
+            'Cheers,',
+            'Rafi',
+          ].join('\n'),
+        },
+      });
+
+      const t2 = await this.prisma.emailTemplate.create({
+        data: {
+          name: 'Outreach Step 2 — Follow-up (3 days)',
+          description: 'Default outreach: follow-up at +3 days',
+          subject:
+            'Re: {{lead.businessName}}: I noticed a few things on your website',
+          bodyText: [
+            'Hey,',
+            '',
+            'I just wanted to follow up on my last email. I know these things can get busy, but I really think there is an opportunity to bring more clients through your site.',
+            'I would love to walk you through a quick 15-minute call and share exactly what I saw.',
+            'Just let me know if a short Google Meet works for you.',
+            '',
+            'Cheers,',
+            'Rafi',
+          ].join('\n'),
+        },
+      });
+
+      const t3 = await this.prisma.emailTemplate.create({
+        data: {
+          name: 'Outreach Step 3 — Soft close (7 days)',
+          description: 'Default outreach: soft close at +7 days',
+          subject: 'Should I close this out?',
+          bodyText: [
+            'Hey,',
+            '',
+            "I haven't heard back, which usually means one of three things:",
+            "- You're busy.",
+            "- It's not a priority right now.",
+            "- You're not interested.",
+            '',
+            'All completely fair.',
+            'Before I close, I just wanted to check one last time.',
+            "If you'd like some honest feedback on your website and online presence, I'm happy to jump on a quick Google Meet/Zoom and share what I found.",
+            "If now isn't the right time, no worries at all.",
+            '',
+            'Rafi',
+            'Onspace Agency',
+          ].join('\n'),
+        },
+      });
+
+      const sequence = await this.prisma.sequence.create({
+        data: {
+          name: 'Default outreach',
+          description:
+            '3-step outreach: initial (day 0) → follow-up (day 3) → soft close (day 7). Auto-enrolls every new lead with an email.',
+          status: 'active',
+          accountId: account.id,
+          sendIntervalSec: 12,
+          dailySendLimit: 150,
+          rampStartCap: 50,
+          rampStepPerDay: 10,
+          rampMaxCap: 150,
+          autoEnrollAll: true,
+          startedAt: new Date(),
+        },
+      });
+
+      await this.prisma.sequenceStep.createMany({
+        data: [
+          { sequenceId: sequence.id, order: 0, delayDays: 0, templateId: t1.id },
+          { sequenceId: sequence.id, order: 1, delayDays: 3, templateId: t2.id },
+          { sequenceId: sequence.id, order: 2, delayDays: 7, templateId: t3.id },
+        ],
+      });
+
+      this.log.log(
+        `default-outreach: provisioned sequence ${sequence.id} (3 steps, ramp 50→150 +10/day)`,
+      );
+      return { created: true };
+    } catch (err) {
+      this.log.warn(
+        `default-outreach: provisioning failed — ${err instanceof Error ? err.message : err}`,
+      );
+      return { created: false };
+    }
+  }
+
+  /**
+   * Auto-enrollment sweep. For every sequence with `autoEnrollAll=true`,
+   * find leads with an email + stage='new' that aren't already enrolled
+   * in that sequence, and enroll them. Capped to AUTO_ENROLL_BATCH per
+   * sweep so a backlog can't flood BullMQ in one tick.
+   */
+  async autoEnrollSweep(): Promise<{ enrolled: number }> {
+    const AUTO_ENROLL_BATCH = 200;
+    const sequences = await this.prisma.sequence.findMany({
+      where: { autoEnrollAll: true, status: 'active' },
+      select: {
+        id: true,
+        steps: { orderBy: { order: 'asc' }, select: { delayDays: true }, take: 1 },
+      },
+    });
+    if (sequences.length === 0) return { enrolled: 0 };
+
+    let enrolled = 0;
+    for (const seq of sequences) {
+      const firstDelayDays = seq.steps[0]?.delayDays ?? 0;
+      const candidates = await this.prisma.lead.findMany({
+        where: {
+          email: { not: null },
+          stage: 'new',
+          sequenceEnrollments: { none: { sequenceId: seq.id } },
+        },
+        select: { id: true, email: true },
+        take: AUTO_ENROLL_BATCH,
+      });
+      if (candidates.length === 0) continue;
+
+      const now = new Date();
+      const firstSendAt = new Date(now.getTime() + firstDelayDays * 86_400_000);
+      const data = candidates
+        .filter((l) => l.email && l.email.includes('@'))
+        .map((l) => ({
+          sequenceId: seq.id,
+          leadId: l.id,
+          toEmail: l.email as string,
+          status: 'active' as const,
+          nextStepOrder: 0,
+          nextSendAt: firstSendAt,
+        }));
+      if (data.length === 0) continue;
+      const result = await this.prisma.sequenceEnrollment.createMany({
+        data,
+        skipDuplicates: true,
+      });
+      enrolled += result.count;
+      if (result.count > 0) {
+        await this.prisma.sequence.update({
+          where: { id: seq.id },
+          data: { enrolledCount: { increment: result.count } },
+        });
+      }
+    }
+    if (enrolled > 0) this.log.log(`auto-enroll: enrolled ${enrolled} leads`);
+    return { enrolled };
+  }
+
+  /**
+   * Day-of-ramp cap. Returns the effective cap for `sequence` today
+   * based on its ramp config + startedAt anchor. If the sequence hasn't
+   * started, returns rampStartCap. Once startedAt + (max-start)/step
+   * days pass, returns rampMaxCap.
+   */
+  rampedDailyCap(seq: {
+    rampStartCap: number;
+    rampStepPerDay: number;
+    rampMaxCap: number;
+    startedAt: Date | null;
+    dailySendLimit: number;
+  }): number {
+    if (!seq.startedAt) {
+      return Math.min(seq.rampStartCap, seq.dailySendLimit);
+    }
+    const dayIndex = Math.max(
+      0,
+      Math.floor(
+        (Date.now() - new Date(seq.startedAt).getTime()) / 86_400_000,
+      ),
+    );
+    const computed = seq.rampStartCap + dayIndex * seq.rampStepPerDay;
+    const capped = Math.min(seq.rampMaxCap, Math.max(seq.rampStartCap, computed));
+    return Math.min(capped, seq.dailySendLimit);
+  }
 }
