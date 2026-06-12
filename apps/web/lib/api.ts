@@ -707,6 +707,7 @@ export interface DashboardSummary {
     meetingsToday: number;
     callsToday: number;
     proposalsSentToday: number;
+    emailsSentToday: number;
   };
   stageFunnel: { stage: LeadStage; count: number }[];
   followUpContextCounts: { context: TaskContext; count: number }[];
@@ -1594,6 +1595,52 @@ export const api = {
     request<GroupEmailCoverage>(`/groups/${groupId}/email-coverage`),
   getAccountTodayCount: (accountId: string) =>
     request<{ sentToday: number }>(`/email/accounts/${accountId}/today-count`),
+
+  // ─── Email activity (dashboard tile → /email-activity page) ───────────
+  getEmailActivity: (
+    params: {
+      from?: string;
+      to?: string;
+      q?: string;
+      replied?: boolean;
+      take?: number;
+      skip?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.q) qs.set('q', params.q);
+    if (params.replied) qs.set('replied', '1');
+    if (params.take != null) qs.set('take', String(params.take));
+    if (params.skip != null) qs.set('skip', String(params.skip));
+    return request<{
+      items: {
+        id: string;
+        subject: string;
+        toEmail: string;
+        fromEmail: string;
+        sentAt: string | null;
+        openedAt: string | null;
+        repliedAt: string | null;
+        status: string;
+        lead: {
+          id: string;
+          businessName: string;
+          city: string | null;
+          state: string | null;
+        } | null;
+      }[];
+      total: number;
+      take: number;
+      skip: number;
+    }>(`/email/activity?${qs.toString()}`);
+  },
+  getEmailActivityDaily: (days = 14) =>
+    request<{
+      days: number;
+      buckets: { date: string; sent: number; replies: number }[];
+    }>(`/email/activity/daily?days=${days}`),
 
   // ─── Phase 10: Meetings ───────────────────────────────────────────────
   listMeetings: (params: Record<string, string | number | undefined> = {}) => {

@@ -75,6 +75,12 @@ services:
       # the OAuth callback to redirect back to the web app.
       PUBLIC_API_URL: ${PUBLIC_API_URL}
       FRONTEND_URL: ${PUBLIC_WEB_URL}
+      # Outreach pacing (see sequences.constants.ts):
+      OUTREACH_TZ: ${OUTREACH_TZ:-America/New_York}
+      OUTREACH_HOUR_START: ${OUTREACH_HOUR_START:-9}
+      OUTREACH_HOUR_END: ${OUTREACH_HOUR_END:-17}
+      OUTREACH_GAP_MIN_SEC: ${OUTREACH_GAP_MIN_SEC:-480}
+      OUTREACH_GAP_MAX_SEC: ${OUTREACH_GAP_MAX_SEC:-600}
     ports:
       # Bind to loopback only — Tailscale on the host reaches these
       # via 127.0.0.1 then Funnel publishes them. Not exposed to LAN.
@@ -116,6 +122,13 @@ services:
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: '6379'
+      # Mirror outreach pacing so a worker-side tick processes the queue
+      # under the same office-hours + gap rules as the api container.
+      OUTREACH_TZ: ${OUTREACH_TZ:-America/New_York}
+      OUTREACH_HOUR_START: ${OUTREACH_HOUR_START:-9}
+      OUTREACH_HOUR_END: ${OUTREACH_HOUR_END:-17}
+      OUTREACH_GAP_MIN_SEC: ${OUTREACH_GAP_MIN_SEC:-480}
+      OUTREACH_GAP_MAX_SEC: ${OUTREACH_GAP_MAX_SEC:-600}
       REDIS_TLS: 'false'
     shm_size: '512m'
 

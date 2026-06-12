@@ -7,6 +7,11 @@ import { EmailService } from '../email/email.service';
 import { renderTags, MergeContext } from '../campaigns/merge-tags';
 import { SequencesService } from './sequences.service';
 import {
+  OUTREACH_GAP_MAX_SEC,
+  OUTREACH_GAP_MIN_SEC,
+  OUTREACH_HOUR_END,
+  OUTREACH_HOUR_START,
+  OUTREACH_TZ,
   SEQUENCES_QUEUE,
   SEQUENCES_TICK_BATCH_SIZE,
   SEQUENCE_AUTO_ENROLL_JOB,
@@ -14,6 +19,48 @@ import {
 } from './sequences.constants';
 
 const STOP_SET = new Set<LeadStage>(SEQUENCE_STOP_STAGES);
+
+/**
+ * Returns the hour-of-day (0–23) for `now` in `tz` using the runtime's
+ * built-in Intl tables — no date library needed. Wraps an IANA TZ
+ * string (e.g. `America/New_York`).
+ */
+function hourInTz(now: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(now);
+  const h = parts.find((p) => p.type === 'hour')?.value ?? '0';
+  return parseInt(h, 10) || 0;
+}
+
+function isOfficeHours(now: Date): boolean {
+  const h = hourInTz(now, OUTREACH_TZ);
+  return h >= OUTREACH_HOUR_START && h < OUTREACH_HOUR_END;
+}
+
+/**
+ * Milliseconds until the next office-hour open from `now`. Probes hour
+ * by hour up to 48 hours — covers weekends and DST edges without
+ * pulling a date lib. Used to push not-yet-sendable enrollments
+ * forward so they don't thrash the tick.
+ */
+function msUntilOfficeOpen(now: Date): number {
+  let probe = now;
+  for (let i = 0; i < 48; i++) {
+    if (isOfficeHours(probe)) return Math.max(0, probe.getTime() - now.getTime());
+    probe = new Date(probe.getTime() + 60 * 60 * 1000);
+  }
+  return 60 * 60 * 1000;
+}
+
+function randomGapMs(): number {
+  const min = Math.max(1, OUTREACH_GAP_MIN_SEC);
+  const max = Math.max(min, OUTREACH_GAP_MAX_SEC);
+  const sec = min + Math.floor(Math.random() * (max - min + 1));
+  return sec * 1000;
+}
 
 /**
  * Phase 18 — drip sequence processor. Single tick scans every active
@@ -56,6 +103,18 @@ export class SequencesProcessor extends WorkerHost {
     }
 
     const now = new Date();
+
+    // Office-hours guard. Outside the window the whole tick is a no-op;
+    // we don't even fetch enrollments — they'll be picked up by the
+    // next tick that lands inside the window. We log once per tick so
+    // a quiet stack at 2 AM doesn't look broken.
+    if (!isOfficeHours(now)) {
+      this.log.log(
+        `sequence tick: outside office hours (${OUTREACH_TZ} ${OUTREACH_HOUR_START}-${OUTREACH_HOUR_END}h) — sleeping`,
+      );
+      return { stopped: true, reason: 'outside-office-hours' };
+    }
+
     const due = await this.prisma.sequenceEnrollment.findMany({
       where: { status: 'active', nextSendAt: { lte: now } },
       orderBy: { nextSendAt: 'asc' },
@@ -84,13 +143,20 @@ export class SequencesProcessor extends WorkerHost {
     // sentToday for each account on first encounter and decrement as we
     // send; once an account hits 0 we skip remaining enrollments on it.
     const remainingByAccount = new Map<string, number>();
+    // Per-account "next allowed send-time" memo. After each send we set
+    // it to now + random(OUTREACH_GAP_MIN_SEC..MAX). Subsequent
+    // enrollments on the same account that hit before that time get
+    // their `nextSendAt` bumped instead of firing — preserves the gap
+    // both within this tick AND across the next tick (5 min later).
+    const nextAllowedByAccount = new Map<string, number>();
+    // Bootstrap from the most recent send per account so a worker
+    // restart can't fire faster than the configured gap.
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
 
     let sent = 0;
     let exited = 0;
     let skipped = 0;
-    let lastSentAccount: string | null = null;
 
     for (const enrollment of due) {
       const seq = enrollment.sequence;
@@ -177,6 +243,38 @@ export class SequencesProcessor extends WorkerHost {
         continue;
       }
 
+      // Per-account 8–10 min gap. Bootstrap from the most recent
+      // EmailLog so a worker restart can't fire faster than the
+      // configured gap. After that, the in-memory map is authoritative
+      // for the rest of the tick.
+      let nextAllowed = nextAllowedByAccount.get(seq.accountId);
+      if (nextAllowed === undefined) {
+        const lastSend = await this.prisma.emailLog.findFirst({
+          where: { accountId: seq.accountId },
+          orderBy: { sentAt: 'desc' },
+          select: { sentAt: true },
+        });
+        nextAllowed =
+          lastSend?.sentAt != null
+            ? lastSend.sentAt.getTime() + OUTREACH_GAP_MIN_SEC * 1000
+            : 0;
+        nextAllowedByAccount.set(seq.accountId, nextAllowed);
+      }
+      const nowMs = Date.now();
+      if (nowMs < nextAllowed) {
+        // Push this enrollment's nextSendAt to the per-account gap
+        // boundary + a small randomization so we don't dog-pile when
+        // the gap expires. Cheaper than a per-tick spin and works
+        // across worker restarts.
+        const pushTo = new Date(nextAllowed + Math.floor(Math.random() * 30_000));
+        await this.prisma.sequenceEnrollment.update({
+          where: { id: enrollment.id },
+          data: { nextSendAt: pushTo },
+        });
+        skipped += 1;
+        continue;
+      }
+
       // Render template + merge tags.
       const template = await this.prisma.emailTemplate.findUnique({
         where: { id: step.templateId },
@@ -251,13 +349,10 @@ export class SequencesProcessor extends WorkerHost {
         });
       }
 
-      // Inter-send rate pacing — only when consecutive sends share an
-      // account.
-      if (lastSentAccount === seq.accountId) {
-        await new Promise((r) =>
-          setTimeout(r, Math.max(1, seq.sendIntervalSec) * 1000),
-        );
-      }
+      // (Inter-send pacing is now handled by `nextAllowedByAccount`
+      // above — no sleep inside the tick. After each send we push the
+      // next allowed time forward by random(OUTREACH_GAP_MIN_SEC,
+      // OUTREACH_GAP_MAX_SEC).)
 
       try {
         const log = await this.emails.send({
@@ -295,7 +390,10 @@ export class SequencesProcessor extends WorkerHost {
         sent += 1;
         remaining -= 1;
         remainingByAccount.set(seq.accountId, remaining);
-        lastSentAccount = seq.accountId;
+        // Push the per-account gate forward so the next enrollment on
+        // this account in the same tick (or any tick before the gate
+        // expires) gets skipped + bumped.
+        nextAllowedByAccount.set(seq.accountId, Date.now() + randomGapMs());
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.log.error(

@@ -124,9 +124,16 @@ function StatGrid({ summary }: { summary: DashboardSummary | undefined }) {
         href="/leads?orderBy=recent"
       />
       <StatCard
+        icon={<Send size={14} />}
+        label="Sent today"
+        value={t?.emailsSentToday}
+        href="/email-activity"
+      />
+      <StatCard
         icon={<Reply size={14} />}
         label="Replies today"
         value={t?.repliesToday}
+        href="/email-activity?filter=replied"
       />
       <StatCard
         icon={<MailOpen size={14} />}

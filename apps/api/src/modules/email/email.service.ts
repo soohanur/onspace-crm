@@ -816,6 +816,101 @@ export class EmailService {
     items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     return { lead, items };
   }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Activity — flat email-log view + daily ratio buckets, for the
+  // dashboard "Sent today" tile → /email-activity page.
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Paginated list of outbound email logs across all leads. Used by
+   * /email-activity. Supports range + search + reply-filter, matches
+   * the same UX as the global /leads table.
+   */
+  async activityList(opts: {
+    from?: Date;
+    to?: Date;
+    q?: string;
+    repliedOnly?: boolean;
+    take?: number;
+    skip?: number;
+  }) {
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 500);
+    const skip = Math.max(opts.skip ?? 0, 0);
+    const where: any = { status: 'sent' };
+    if (opts.from || opts.to) {
+      where.sentAt = {};
+      if (opts.from) where.sentAt.gte = opts.from;
+      if (opts.to) where.sentAt.lte = opts.to;
+    }
+    if (opts.repliedOnly) where.repliedAt = { not: null };
+    if (opts.q && opts.q.trim()) {
+      const q = opts.q.trim();
+      where.OR = [
+        { subject: { contains: q, mode: 'insensitive' } },
+        { toEmail: { contains: q, mode: 'insensitive' } },
+        { lead: { businessName: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.emailLog.findMany({
+        where,
+        orderBy: { sentAt: 'desc' },
+        take,
+        skip,
+        select: {
+          id: true,
+          subject: true,
+          toEmail: true,
+          fromEmail: true,
+          sentAt: true,
+          openedAt: true,
+          repliedAt: true,
+          status: true,
+          lead: { select: { id: true, businessName: true, city: true, state: true } },
+        },
+      }),
+      this.prisma.emailLog.count({ where }),
+    ]);
+    return { items, total, take, skip };
+  }
+
+  /**
+   * Daily-bucket sent + reply counts for the graph above the table.
+   * `days` window (default 14) ending at end-of-today, UTC.
+   */
+  async activityDaily(days: number = 14) {
+    const d = Math.min(Math.max(days, 1), 90);
+    const today = new Date();
+    today.setUTCHours(23, 59, 59, 999);
+    const start = new Date(today.getTime() - (d - 1) * 24 * 60 * 60 * 1000);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const sentRows = await this.prisma.emailLog.findMany({
+      where: { status: 'sent', sentAt: { gte: start, lte: today } },
+      select: { sentAt: true, repliedAt: true },
+    });
+
+    type Bucket = { date: string; sent: number; replies: number };
+    const buckets = new Map<string, Bucket>();
+    for (let i = 0; i < d; i++) {
+      const dt = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      const key = dt.toISOString().slice(0, 10);
+      buckets.set(key, { date: key, sent: 0, replies: 0 });
+    }
+    for (const r of sentRows) {
+      if (!r.sentAt) continue;
+      const k = r.sentAt.toISOString().slice(0, 10);
+      const b = buckets.get(k);
+      if (b) b.sent += 1;
+      if (r.repliedAt) {
+        const rk = r.repliedAt.toISOString().slice(0, 10);
+        const rb = buckets.get(rk);
+        if (rb) rb.replies += 1;
+      }
+    }
+    return { days: d, buckets: Array.from(buckets.values()) };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

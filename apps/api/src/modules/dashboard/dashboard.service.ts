@@ -34,6 +34,7 @@ export interface DashboardSummary {
     meetingsToday: number;
     callsToday: number;
     proposalsSentToday: number;
+    emailsSentToday: number;
   };
   stageFunnel: { stage: LeadStage; count: number }[];
   followUpContextCounts: { context: TaskContext; count: number }[];
@@ -161,6 +162,7 @@ export class DashboardService {
       meetingsToday,
       callsToday,
       proposalsSentToday,
+      emailsSentToday,
       stageRows,
       followupRows,
       campaigns,
@@ -202,6 +204,12 @@ export class DashboardService {
       }),
       this.prisma.proposal.count({
         where: { sentAt: { gte: startOfDay, lte: endOfDay } },
+      }),
+      this.prisma.emailLog.count({
+        where: {
+          sentAt: { gte: startOfDay, lte: endOfDay },
+          status: 'sent',
+        },
       }),
       this.prisma.lead.groupBy({
         by: ['stage'],
@@ -274,6 +282,7 @@ export class DashboardService {
         meetingsToday,
         callsToday,
         proposalsSentToday,
+        emailsSentToday,
       },
       stageFunnel,
       followUpContextCounts,

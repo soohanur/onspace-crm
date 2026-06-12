@@ -65,6 +65,35 @@ export class EmailController {
     return this.emails.listForLead(leadId, take ? Number(take) : undefined);
   }
 
+  /**
+   * Cross-lead activity list for the /email-activity dashboard page.
+   * Supports `?from=YYYY-MM-DD&to=YYYY-MM-DD&q=…&replied=1&take=&skip=`.
+   */
+  @Get('email/activity')
+  activity(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('q') q?: string,
+    @Query('replied') replied?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.emails.activityList({
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to + 'T23:59:59.999Z') : undefined,
+      q,
+      repliedOnly: replied === '1' || replied === 'true',
+      take: take ? Number(take) : undefined,
+      skip: skip ? Number(skip) : undefined,
+    });
+  }
+
+  /** Daily sent + reply counts for the graph above /email-activity. */
+  @Get('email/activity/daily')
+  activityDaily(@Query('days') days?: string) {
+    return this.emails.activityDaily(days ? Number(days) : 14);
+  }
+
   /** Chat-style conversation list for the /emails inbox: one row per lead. */
   @Get('email/conversations')
   conversations() {
